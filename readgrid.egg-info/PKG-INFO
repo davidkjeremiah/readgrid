@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: readgrid
-Version: 0.1.0
+Version: 0.1.1
 Summary: A document layout pipeline for detecting tables, images, and structured extraction.
 Home-page: https://github.com/davidkjeremiah/readgrid
 Author: David Jeremiah
@@ -110,4 +110,4 @@ stage_3(api_key="YOUR_API_KEY")
 ## 📄 License
 
 MIT License.
-See [LICENSE](LICENSE) for details.
+See LICENSE for details.
