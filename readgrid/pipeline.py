@@ -31,9 +31,9 @@ def cleanup_pipeline():
     """Removes all generated files and folders from the pipeline."""
     print("🧹 Cleaning up pipeline artifacts...")
     items_to_remove = [
-        'uploads', 
-        'bounded_images', 
-        'final_outputs', 
+        'uploads',
+        'bounded_images',
+        'final_outputs',
         'coords.json'
     ]
     for item in items_to_remove:
@@ -51,7 +51,7 @@ def cleanup_pipeline():
 
 def pretty_print_page_with_image(json_path: str):
     """
-    Pretty prints the content of a final JSON file and displays its 
+    Pretty prints the content of a final JSON file and displays its
     corresponding annotated image.
     """
     try:
@@ -69,19 +69,19 @@ def pretty_print_page_with_image(json_path: str):
     header = data.get("Page header", "") or "(none)"
     page_text = data.get("Page text", "") or "(none)"
     footer = data.get("Page footer", "") or "(none)"
-    
+
     print(f"📋 HEADER:\n---\n{textwrap.fill(header, 100)}\n")
     print(f"📖 PAGE TEXT:\n---\n{textwrap.fill(page_text, 100)}")
     print(f"\n📝 FOOTER:\n---\n{textwrap.fill(footer, 100)}\n")
 
     table_bbox = data.get("table_bbox", [])
     image_bbox = data.get("image_bbox", [])
-    
+
     print("🟥 TABLE BBOX ([ymin, xmin, ymax, xmax]):")
     print("---" if table_bbox else "(none)")
     if table_bbox:
         for i, bbox in enumerate(table_bbox, 1): print(f"  Table {i}: {bbox}")
-        
+
     print("\n🟩 IMAGE BBOX ([ymin, xmin, ymax, xmax]):")
     print("---" if image_bbox else "(none)")
     if image_bbox:
@@ -137,7 +137,7 @@ def show_comparison_view(json_path: str):
     </div>
     """
     display(HTML(html_content))
-    
+
 # ==================== HELPER & EDITOR FUNCTIONS ====================
 
 def xywh_to_yminmax(box: tuple) -> List[int]:
@@ -184,25 +184,25 @@ def detect_image_regions(image: np.ndarray, min_area_percentage=1.5) -> List[Lis
     return boxes
 
 def create_annotated_image(
-    image: np.ndarray, 
-    table_boxes: List[List[int]], 
+    image: np.ndarray,
+    table_boxes: List[List[int]],
     image_boxes: List[List[int]]
 ) -> np.ndarray:
     """Creates annotated image with table and image bounding boxes."""
     annotated_img = image.copy()
-    
+
     # Draw table boxes (red)
     for i, box in enumerate(table_boxes):
         x, y, w, h = box
         cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
         cv2.putText(annotated_img, f"Table {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-    
+
     # Draw image boxes (green)
     for i, box in enumerate(image_boxes):
         x, y, w, h = box
         cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 255, 0), 3)
         cv2.putText(annotated_img, f"Image {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-    
+
     return annotated_img
 
 def create_context_image(
@@ -212,139 +212,160 @@ def create_context_image(
 ) -> np.ndarray:
     """Creates image with context boxes (all boxes except the one being edited)."""
     context_img = image.copy()
-    
+
     # Draw context table boxes (red)
     for box, original_idx in context_table_boxes:
         x, y, w, h = box
         cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
         cv2.putText(context_img, f"Table {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-    
+
     # Draw context image boxes (green)
     for box, original_idx in context_image_boxes:
         x, y, w, h = box
         cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
         cv2.putText(context_img, f"Image {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-    
+
     return context_img
 
-def interactive_editor(img: np.ndarray, initial_box: List[int], editor_title: str) -> List[int]:
-    """Launches the HTML/JS editor for editing a single bounding box."""
+def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_title: str) -> List[List[int]]:
+    """Launches the HTML/JS editor for editing multiple bounding boxes."""
+
     _, buffer = cv2.imencode('.png', img)
     img_str = base64.b64encode(buffer).decode('utf-8')
     img_data_url = f'data:image/png;base64,{img_str}'
-    
-    # Convert single box to list format for the editor
-    initial_boxes = [initial_box] if initial_box else []
+
+    # Accept multiple initial boxes (or empty list)
+    initial_boxes = initial_boxes if initial_boxes else []
     boxes_json = json.dumps(initial_boxes)
-    
+
     html_template = f"""
     <div style="border: 2px solid #ccc; padding: 10px; display: inline-block;">
         <h3 style="font-family: sans-serif;">{editor_title}</h3>
-        <p style="font-family: sans-serif; margin-top: 0;">
-            <b>Click and drag to draw a box.</b> | <b>Click an existing box to delete.</b>
+        <p style="font-family: sans-serif; margin-top: 0; line-height: 1.4;">
+            <b>Click and drag</b> to draw a box.<br>
+            <b>Click inside a box</b> to delete it.<br>
+            <b>Use ↩️ Undo Last</b> to remove the most recent box.<br>
+            You can draw multiple boxes before submitting.
         </p>
         <canvas id="editor-canvas" style="cursor: crosshair; border: 1px solid black;"></canvas>
         <br>
-        <button id="done-button" style="margin-top: 10px; font-size: 16px; padding: 8px 16px;">✅ Submit Box</button>
+        <button id="undo-button" style="margin-top: 10px; font-size: 14px; padding: 6px 12px;">↩️ Undo Last</button>
+        <button id="done-button" style="margin-top: 10px; font-size: 16px; padding: 8px 16px;">✅ Submit</button>
         <div id="status" style="margin-top: 10px; font-family: sans-serif; font-size: 14px;"></div>
     </div>
     <script>
-        const canvas = document.getElementById('editor-canvas');
-        const ctx = canvas.getContext('2d');
-        const doneButton = document.getElementById('done-button');
-        const status = document.getElementById('status');
-        const img = new Image();
-        
-        window.finished = false;
-        window.finalBoxes = [];
-        let boxes = JSON.parse('{boxes_json}');
-        let isDrawing = false;
-        let startX, startY;
-        
-        function updateStatus(message) {{ status.textContent = message; }}
-        
-        img.onload = function() {{
-            canvas.width = img.width;
-            canvas.height = img.height;
-            redraw();
-            updateStatus('Image loaded. Ready for editing.');
-        }};
-        img.src = '{img_data_url}';
-        
-        function redraw() {{
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-            ctx.strokeStyle = 'blue';
-            ctx.lineWidth = 2;
-            boxes.forEach(([x, y, w, h]) => {{ ctx.strokeRect(x, y, w, h); }});
-            updateStatus(`Current boxes: ${{boxes.length}}`);
+    const canvas = document.getElementById('editor-canvas');
+    const ctx = canvas.getContext('2d');
+    const doneButton = document.getElementById('done-button');
+    const undoButton = document.getElementById('undo-button');
+    const status = document.getElementById('status');
+    const img = new Image();
+
+    window.finished = false;
+    window.finalBoxes = [];
+    let boxes = JSON.parse('{boxes_json}');
+    let isDrawing = false;
+    let startX, startY;
+
+    function updateStatus(message) {{ status.textContent = message; }}
+
+    img.onload = function() {{
+        canvas.width = img.width;
+        canvas.height = img.height;
+        redraw();
+        updateStatus('Image loaded. Ready for editing.');
+    }};
+    img.src = '{img_data_url}';
+
+    function redraw() {{
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        ctx.strokeStyle = 'blue';
+        ctx.lineWidth = 2;
+        boxes.forEach(([x, y, w, h], idx) => {{
+            ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = "blue";
+            ctx.font = "14px sans-serif";
+            ctx.fillText(idx+1, x+5, y+20); // label each box
+        }});
+        updateStatus(`Current boxes: ${{boxes.length}}`);
+    }}
+
+    canvas.addEventListener('mousedown', (e) => {{
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        let boxClicked = -1;
+        for (let i = boxes.length - 1; i >= 0; i--) {{
+            const [x, y, w, h] = boxes[i];
+            if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h) {{
+                boxClicked = i;
+                break;
+            }}
         }}
-        
-        canvas.addEventListener('mousedown', (e) => {{
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            let boxClicked = -1;
-            for (let i = boxes.length - 1; i >= 0; i--) {{
-                const [x, y, w, h] = boxes[i];
-                if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h) {{
-                    boxClicked = i;
-                    break;
-                }}
-            }}
-            if (boxClicked !== -1) {{
-                boxes.splice(boxClicked, 1);
-                redraw();
-                updateStatus('Box deleted.');
-            }} else {{
-                isDrawing = true;
-                startX = mouseX;
-                startY = mouseY;
-                updateStatus('Drawing new box...');
-            }}
-        }});
-        
-        canvas.addEventListener('mousemove', (e) => {{
-            if (!isDrawing) return;
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+        if (boxClicked !== -1) {{
+            boxes.splice(boxClicked, 1);
             redraw();
-            ctx.strokeStyle = 'red';
-            ctx.strokeRect(startX, startY, mouseX - startX, mouseY - startY);
-        }});
-        
-        canvas.addEventListener('mouseup', (e) => {{
-            if (!isDrawing) return;
-            isDrawing = false;
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            const x = Math.min(startX, mouseX);
-            const y = Math.min(startY, mouseY);
-            const w = Math.abs(mouseX - startX);
-            const h = Math.abs(mouseY - startY);
-            if (w > 5 && h > 5) {{
-                boxes.push([Math.round(x), Math.round(y), Math.round(w), Math.round(h)]);
-            }}
+            updateStatus('Box deleted.');
+        }} else {{
+            isDrawing = true;
+            startX = mouseX;
+            startY = mouseY;
+            updateStatus('Drawing new box...');
+        }}
+    }});
+
+    canvas.addEventListener('mousemove', (e) => {{
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        redraw();
+        ctx.strokeStyle = 'red';
+        ctx.strokeRect(startX, startY, mouseX - startX, mouseY - startY);
+    }});
+
+    canvas.addEventListener('mouseup', (e) => {{
+        if (!isDrawing) return;
+        isDrawing = false;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const x = Math.min(startX, mouseX);
+        const y = Math.min(startY, mouseY);
+        const w = Math.abs(mouseX - startX);
+        const h = Math.abs(mouseY - startY);
+        if (w > 5 && h > 5) {{
+            boxes.push([Math.round(x), Math.round(y), Math.round(w), Math.round(h)]);
+        }}
+        redraw();
+    }});
+
+    undoButton.addEventListener('click', () => {{
+        if (boxes.length > 0) {{
+            boxes.pop();
             redraw();
-        }});
-        
-        doneButton.addEventListener('click', () => {{
-            doneButton.textContent = '⏳ Submitting...';
-            doneButton.disabled = true;
-            canvas.style.cursor = 'default';
-            window.finalBoxes = boxes;
-            window.finished = true;
-            updateStatus('✅ Submitted! Python is now processing...');
-        }});
+            updateStatus('Last box removed (undo).');
+        }} else {{
+            updateStatus('No boxes to undo.');
+        }}
+    }});
+
+    doneButton.addEventListener('click', () => {{
+        doneButton.textContent = '⏳ Submitting...';
+        doneButton.disabled = true;
+        canvas.style.cursor = 'default';
+        window.finalBoxes = boxes;
+        window.finished = true;
+        updateStatus('✅ Submitted! Python is now processing...');
+    }});
     </script>
     """
-    
+
     display(HTML(html_template))
-    print(f"\n✍️ Edit the {editor_title.lower()} above. Click 'Submit' when done.")
+    print(f"\n✍️ Edit the {editor_title.lower()} above. Draw multiple boxes if needed, then click 'Submit'.")
     print("Waiting for manual correction... ⏳")
-    
+
     final_boxes = None
     for _ in range(600):  # Wait for up to 5 minutes
         try:
@@ -355,43 +376,100 @@ def interactive_editor(img: np.ndarray, initial_box: List[int], editor_title: st
         except Exception:
             pass
         time.sleep(0.5)
-    
-    clear_output(wait=True)
+
+    clear_output(wait=False)
     if final_boxes is not None and len(final_boxes) > 0:
-        print("✅ Manual corrections received!")
-        return final_boxes[0]  # Return the first (and should be only) box
+        print(f"✅ {len(final_boxes)} manual corrections received!")
+        return final_boxes   # ✅ return all boxes now
     else:
-        print("⚠️ No box submitted. Using original box." if initial_box else "⚠️ No box submitted. Box will be removed.")
-        return initial_box if initial_box else None
+        print("⚠️ No boxes submitted. Using original box(es)." if initial_boxes else "⚠️ No boxes submitted. No boxes will be saved.")
+        return initial_boxes if initial_boxes else []
 
 # ==================== STAGE 1: UPLOAD, DETECT, & EDIT ====================
 
+def save_coords(row_id, filename, table_coords_xywh, image_coords_xywh):
+    """Helper: Save current coords to coords.json after each edit (append mode)."""
+    table_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in table_coords_xywh]
+    image_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in image_coords_xywh]
+
+    # Load existing coords if file exists
+    if os.path.exists('coords.json'):
+        with open('coords.json', 'r') as f:
+            try:
+                all_coords = json.load(f)
+            except json.JSONDecodeError:
+                all_coords = {}
+    else:
+        all_coords = {}
+
+    # Update / overwrite only this row_id
+    all_coords[row_id] = {
+        "original_filename": filename,
+        "tables": table_coords_yminmax,
+        "images": image_coords_yminmax
+    }
+
+    # Save back to file
+    with open('coords.json', 'w') as f:
+        json.dump(all_coords, f, indent=4)
+
+    # Count only non-empty
+    n_tables = sum(1 for b in table_coords_yminmax if b)
+    n_images = sum(1 for b in image_coords_yminmax if b)
+
+    print(f"💾 Updated coords.json → {row_id} ({n_tables} tables, {n_images} images)")
+
+
 def stage_1():
     """
-    Handles document upload, detection, and interactive editing (single pass, no loop).
+    Handles multiple document uploads, detection, and interactive editing (batch mode).
+    For each uploaded file:
+      - Ask for row ID upfront (for all files at once).
+      - Process files one by one with editing loop.
     """
-    print("=" * 60 + "\nSTAGE 1: UPLOAD, DETECT, AND EDIT\n" + "=" * 60)
+    print("=" * 60 + "\nSTAGE 1: UPLOAD, DETECT, AND EDIT (BATCH)\n" + "=" * 60)
 
     # Create directories
     for folder in ['uploads', 'bounded_images']:
         os.makedirs(folder, exist_ok=True)
 
-    # Upload file
-    print("\n📤 Please upload your document image...")
+    # Upload files
+    print("\n📤 Please upload your document images...")
     uploaded = files.upload()
     if not uploaded:
         print("❌ No files uploaded.")
         return
 
-    # Initial setup
-    filename = list(uploaded.keys())[0]
-    filepath = os.path.join('uploads', filename)
-    with open(filepath, 'wb') as f:
-        f.write(uploaded[filename])
-    
-    row_id = input(f"➡️ Enter a unique Row ID for '{filename}' (e.g., ID_1): ").strip() or os.path.splitext(filename)[0]
+    # === Step 1: Ask for row IDs for all files ===
+    row_ids = {}
+    for i, filename in enumerate(uploaded.keys(), start=1):
+        row_id = input(f"➡️ Enter a unique Row ID for '{filename}' (default: {os.path.splitext(filename)[0]}): ").strip()
+        if not row_id:
+            row_id = os.path.splitext(filename)[0]
+        row_ids[filename] = row_id
+
+    # === Step 2: Process each file one by one ===
+    for filename, filedata in uploaded.items():
+        filepath = os.path.join('uploads', filename)
+        with open(filepath, 'wb') as f:
+            f.write(filedata)
+
+        row_id = row_ids[filename]
+        print("\n" + "=" * 50)
+        print(f"📄 Now processing file: {filename} (Row ID: {row_id})")
+        print("=" * 50)
+
+        # === Run single-file processing ===
+        process_single_image(filename, filepath, row_id)
+
+
+def process_single_image(filename, filepath, row_id):
+    """
+    Process a single image file with detection + interactive editing.
+    Extracted from stage_1 so we can reuse for batch processing.
+    """
     original_img = cv2.imread(filepath)
-    
+
     # Resize for consistent display
     MAX_WIDTH = 1200
     original_h, original_w, _ = original_img.shape
@@ -401,175 +479,170 @@ def stage_1():
     display_img = cv2.resize(original_img, (display_w, display_h), interpolation=cv2.INTER_AREA)
 
     print("\n" + "=" * 50 + f"\nProcessing: {filename} (Row ID: {row_id})\n" + "=" * 50)
-    print("🤖 Running automatic detection...")
-    
+    print("Analyzing Document Content...")
+
     # Detect on original image, then scale for display
     table_coords_xywh = detect_tables(original_img)
     image_coords_xywh = detect_image_regions(original_img)
-    
-    # Scale coordinates for display
-    table_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)] 
-                           for x, y, w, h in table_coords_xywh]
-    image_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)] 
-                           for x, y, w, h in image_coords_xywh]
-    
+
+    table_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)]
+                            for x, y, w, h in table_coords_xywh]
+    image_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)]
+                            for x, y, w, h in image_coords_xywh]
+
     print(f"✅ Found {len(table_coords_xywh)} tables and {len(image_coords_xywh)} images.")
 
-    # Show initial detection results
-    current_annotated_img = create_annotated_image(display_img, table_coords_display, image_coords_display)
-    print("\n📸 Detection Results (Original vs Annotated):")
-    side_by_side = np.hstack((display_img, current_annotated_img))
-    cv2_imshow(side_by_side)
-
-    # Ask if user wants to edit anything
-    prompt = "\n❓ Are you satisfied with these detections?\n"
-    
-    if table_coords_display:
-        if len(table_coords_display) == 1:
-            prompt += "  - To edit the table, type 'table'\n"
-        else:
-            prompt += f"  - To edit tables, type 'table 1' to 'table {len(table_coords_display)}'\n"
-            
-    if image_coords_display:
-        if len(image_coords_display) == 1:
-            prompt += "  - To edit the image, type 'image'\n"
-        else:
-            prompt += f"  - To edit images, type 'image 1' to 'image {len(image_coords_display)}'\n"
-            
-    prompt += "  - Type 'yes' to approve all and finish\nYour choice: "
-    
-    choice = input(prompt).strip().lower()
-
-    if choice == 'yes':
-        print("✅ All annotations approved.")
-    else:
-        # Parse and handle editing request
-        try:
-            if choice in ['table', 'image']:
-                # Single box case
-                if choice == 'table' and len(table_coords_display) == 1:
-                    box_type = 'table'
-                    box_index = 0
-                elif choice == 'image' and len(image_coords_display) == 1:
-                    box_type = 'image'
-                    box_index = 0
-                else:
-                    print(f"❌ Multiple {choice}s detected. Please specify which one (e.g., '{choice} 1').")
-                    return
-            else:
-                # Parse "table 1", "image 2", etc.
-                parts = choice.split()
-                if len(parts) != 2:
-                    print("❌ Invalid format. Please specify which item to edit.")
-                    return
-                    
-                box_type = parts[0]
-                box_index = int(parts[1]) - 1
-                
-                if box_type not in ['table', 'image']:
-                    print("❌ Invalid type. Use 'table' or 'image'.")
-                    return
-                    
-                # Validate index
-                if box_type == 'table':
-                    if not (0 <= box_index < len(table_coords_display)):
-                        print(f"❌ Table {box_index + 1} doesn't exist.")
-                        return
-                else:  # image
-                    if not (0 <= box_index < len(image_coords_display)):
-                        print(f"❌ Image {box_index + 1} doesn't exist.")
-                        return
-                        
-        except (ValueError, IndexError):
-            print("❌ Invalid input. Please enter a valid choice.")
-            return
-
-        # Perform the editing
-        if box_type == 'table':
-            # Get the box being edited
-            box_to_edit = table_coords_display[box_index]
-            
-            # Create context: all images + all other tables (with original indices)
-            context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display) if i != box_index]
-            context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display)]
-            
-            # Create context image
-            context_img = create_context_image(display_img, context_table_boxes, context_image_boxes)
-            
-            # Edit the specific table box
-            print(f"\n✏️ Editing Table {box_index + 1}...")
-            corrected_boxes = interactive_editor(context_img, [], f"Table {box_index + 1} Editor")
-
-            # Update the specific box
-            if corrected_boxes and len(corrected_boxes) > 0:
-              print(f"DEBUG: corrected_boxes = {corrected_boxes}")
-              print(f"DEBUG: corrected_boxes[0] = {corrected_boxes[0]}")
-              print(f"DEBUG: type of corrected_boxes[0] = {type(corrected_boxes[0])}")
-              table_coords_display[box_index] = corrected_boxes  # This updates display
-              table_coords_xywh[box_index] = [int(v / scale) for v in corrected_boxes]  # This updates final coords
-            else:
-                # Remove the box if None returned
-                del table_coords_display[box_index]
-                del table_coords_xywh[box_index]
-                
-        else:  # image
-            # Get the box being edited
-            box_to_edit = image_coords_display[box_index]
-            
-            # Create context: all tables + all other images (with original indices)
-            context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display)]
-            context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display) if i != box_index]
-            
-            # Create context image
-            context_img = create_context_image(display_img, context_table_boxes, context_image_boxes)
-            
-            # Edit the specific image box
-            print(f"\n✏️ Editing Image {box_index + 1}...")
-            corrected_box = interactive_editor(context_img, box_to_edit, f"Image {box_index + 1} Editor")
-            
-            # Update the specific box
-            if corrected_box:
-                image_coords_display[box_index] = corrected_box
-                # Scale back to original coordinates
-                image_coords_xywh[box_index] = [int(v / scale) for v in corrected_box]
-            else:
-                # Remove the box if None returned
-                del image_coords_display[box_index]
-                del image_coords_xywh[box_index]
-        
-        # Show final result: clean original vs updated result
+    # === LOOP FOR MULTIPLE EDITS ===
+    while True:
         final_annotated = create_annotated_image(display_img, table_coords_display, image_coords_display)
-        print("\n🔄 Final Result (Original Clean vs Updated):")
         comparison = np.hstack((display_img, final_annotated))
         cv2_imshow(comparison)
 
-    # Convert to yminmax format for final output
-    table_coords_yminmax = [xywh_to_yminmax(box) for box in table_coords_xywh]
-    image_coords_yminmax = [xywh_to_yminmax(box) for box in image_coords_xywh]
+        time.sleep(0.5)
 
-    # Save final results
-    final_coords = {
-        row_id: {
-            "original_filename": filename,
-            "tables": [[int(v) for v in box] for box in table_coords_yminmax],
-            "images": [[int(v) for v in box] for box in image_coords_yminmax]
-        }
-    }
-    
-    with open('coords.json', 'w') as f:
-        json.dump(final_coords, f, indent=4)
+        print("\n" + "=" * 50)
+        print("ACTION MENU")
+        print("=" * 50)
 
-    # Save final annotated image (on original resolution)
+        choice = input(
+            "❓ What would you like to do?\n"
+            f"  - To edit a table, type 'table 1' to 'table {len(table_coords_display)}'\n"
+            f"  - To edit an image, type 'image 1' to 'image {len(image_coords_display)}'\n"
+            "  - To ADD a new box, type 'add table' or 'add image'\n"
+            "  - Type 'done' to approve all and finish.\n\n"
+            "Your choice: "
+        ).strip().lower()
+        
+        # === 1. Handle DONE ===
+        if choice == "done":
+            # ✅ Make sure we save results before breaking
+            save_coords(row_id, filename, table_coords_xywh, image_coords_xywh)
+            break
+
+        # === 2. Handle ADD ===
+        if choice.startswith("add "):
+            _, add_type = choice.split()
+            if add_type not in ["table", "image"]:
+                print("❌ Invalid add type. Use 'add table' or 'add image'.")
+                continue
+
+            # Build context
+            context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display)]
+            context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display)]
+            context_img = create_context_image(display_img, context_table_boxes, context_image_boxes)
+
+            print(f"\n➕ Adding a new {add_type}...")
+            corrected_boxes = interactive_editor(context_img, [], f"New {add_type.capitalize()} Editor")
+
+            if corrected_boxes and len(corrected_boxes) > 0:
+                for cb in corrected_boxes:
+                    if add_type == "table":
+                        table_coords_display.append(cb)
+                        table_coords_xywh.append([int(v / scale) for v in cb])
+                    else:
+                        image_coords_display.append(cb)
+                        image_coords_xywh.append([int(v / scale) for v in cb])
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh)
+            else:
+                print("⚠️ No box added.")
+
+            continue
+        
+        # === 3. Handle EDIT ===
+        try:
+            if choice in ["table", "image"]:
+                box_type = choice
+                box_index = 0
+                if box_type == "table" and len(table_coords_display) > 1:
+                    print("❌ Multiple tables detected. Please specify 'table N'.")
+                    continue
+                if box_type == "image" and len(image_coords_display) > 1:
+                    print("❌ Multiple images detected. Please specify 'image N'.")
+                    continue
+            else:
+                parts = choice.split()
+                if len(parts) != 2:
+                    print("❌ Invalid format. Use 'table 1' or 'image 2'.")
+                    continue
+                box_type, box_index = parts[0], int(parts[1]) - 1
+                if box_type not in ["table", "image"]:
+                    print("❌ Invalid type. Use 'table' or 'image'.")
+                    continue
+
+            # === TABLE EDITING ===
+            if box_type == "table":
+                if not (0 <= box_index < len(table_coords_display)):
+                    print(f"❌ Table {box_index+1} doesn't exist.")
+                    continue
+
+                context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display) if i != box_index]
+                context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display)]
+                context_img = create_context_image(display_img, context_table_boxes, context_image_boxes)
+
+                print(f"\n✏️ Editing Table {box_index+1}...")
+                corrected_boxes = interactive_editor(context_img, [], f"Table {box_index+1} Editor")
+
+                if corrected_boxes and len(corrected_boxes) > 0:
+                    # Replace this one entry with multiple
+                    new_display_boxes = []
+                    new_xywh_boxes = []
+                    for cb in corrected_boxes:
+                        new_display_boxes.append(cb)
+                        new_xywh_boxes.append([int(v / scale) for v in cb])
+
+                    # Remove the old one and extend with new
+                    table_coords_display.pop(box_index)
+                    table_coords_xywh.pop(box_index)
+                    table_coords_display.extend(new_display_boxes)
+                    table_coords_xywh.extend(new_xywh_boxes)
+                else:
+                    # User deleted all boxes
+                    table_coords_display[box_index] = [0, 0, 0, 0]
+                    table_coords_xywh[box_index] = [0, 0, 0, 0]
+
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh)
+
+            # === IMAGE EDITING ===
+            else:
+                if not (0 <= box_index < len(image_coords_display)):
+                    print(f"❌ Image {box_index+1} doesn't exist.")
+                    continue
+
+                context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display)]
+                context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display) if i != box_index]
+                context_img = create_context_image(display_img, context_table_boxes, context_image_boxes)
+
+                print(f"\n✏️ Editing Image {box_index+1}...")
+                corrected_boxes = interactive_editor(context_img, [image_coords_display[box_index]], f"Image {box_index+1} Editor")
+
+                if corrected_boxes and len(corrected_boxes) > 0:
+                    new_display_boxes = []
+                    new_xywh_boxes = []
+                    for cb in corrected_boxes:
+                        new_display_boxes.append(cb)
+                        new_xywh_boxes.append([int(v / scale) for v in cb])
+
+                    image_coords_display.pop(box_index)
+                    image_coords_xywh.pop(box_index)
+                    image_coords_display.extend(new_display_boxes)
+                    image_coords_xywh.extend(new_xywh_boxes)
+                else:
+                    image_coords_display[box_index] = [0, 0, 0, 0]
+                    image_coords_xywh[box_index] = [0, 0, 0, 0]
+
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh)
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+    # === FINAL SAVE ===
     final_annotated_img = create_annotated_image(original_img, table_coords_xywh, image_coords_xywh)
     bounded_path = os.path.join('bounded_images', f"{row_id}.jpg")
     cv2.imwrite(bounded_path, final_annotated_img)
-    
-    print("\n" + "="*60)
-    print(f"💾 Saved final coordinates for '{row_id}' to: coords.json")
-    print(f"✅ Saved final annotated image to: {bounded_path}")
-    print("✅ STAGE 1 COMPLETE")
-    print("="*60)
 
+    print("\n" + "=" * 60)
+    print(f"✅ STAGE COMPLETE for {filename} — Final annotated image saved to {bounded_path}")
+    print("=" * 60)
 
 def stage_2(
     row_id: str,
@@ -592,7 +665,7 @@ def stage_2(
     if custom_coords is None and not (box_type and box_index is not None):
         print("❌ Error: You must provide either `custom_coords` or both `box_type` and `box_index`.")
         return
-    
+
     if box_type and box_type not in ['tables', 'images']:
         print(f"❌ Error: `box_type` must be either 'tables' or 'images', not '{box_type}'.")
         return
@@ -604,7 +677,7 @@ def stage_2(
     if not os.path.exists(coords_path):
         print(f"❌ Error: '{coords_path}' not found. Please run stage_1() first.")
         return
-    
+
     with open(coords_path, 'r') as f:
         all_coords = json.load(f)
 
@@ -617,12 +690,12 @@ def stage_2(
     if not original_filename:
         print(f"❌ Error: 'original_filename' not found for '{row_id}' in coords.json.")
         return
-        
+
     original_image_path = os.path.join(uploads_dir, original_filename)
     if not os.path.exists(original_image_path):
         print(f"❌ Error: Could not find original image at '{original_image_path}'.")
         return
-        
+
     original_image = cv2.imread(original_image_path)
     if original_image is None:
         print(f"❌ Error: Failed to load image from '{original_image_path}'.")
@@ -649,10 +722,15 @@ def stage_2(
              print(f"❌ Error: `box_type` '{box_type}' not found for '{row_id}'.")
              return
 
-    # --- 4. Crop and Display ---
+    # --- 4. Check for empty/removed boxes ---
+    if coords_to_test == [0,0,0,0] or not coords_to_test:
+        print("⚠️ Skipping empty/removed box.")
+        return
+
+    # --- 5. Crop and Display ---
     if coords_to_test:
         ymin, xmin, ymax, xmax = map(int, coords_to_test)
-        
+
         # Ensure coordinates are within image bounds
         h, w, _ = original_image.shape
         ymin, xmin = max(0, ymin), max(0, xmin)
@@ -665,7 +743,7 @@ def stage_2(
         # Create the side-by-side view
         image_with_box = original_image.copy()
         cv2.rectangle(image_with_box, (xmin, ymin), (xmax, ymax), (255, 0, 255), 3) # Bright magenta box
-        
+
         print(f"\n📸 Side-by-Side Preview (Original vs. Tested Coordinate):")
         cv2_imshow(np.hstack((original_image, image_with_box)))
 
@@ -674,7 +752,7 @@ def stage_2(
         print(f"\n🖼️  Zoomed-in View of Cropped Region:")
         cv2_imshow(cropped_region)
         print("\n✅ STAGE 2 COMPLETE")
-
+        
 def stage_3(
     api_key: Optional[str] = None, 
     custom_system_prompt: Optional[str] = None,
