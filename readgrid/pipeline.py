@@ -95,48 +95,196 @@ def pretty_print_page_with_image(json_path: str):
         print(f"\n⚠️ Annotated image not found at: {img_path}")
     print("=" * 100)
 
-def show_comparison_view(json_path: str):
+def show_comparison_view(json_path: str, mode: str = "ir", uploads_dir: str = 'uploads', coords_file: str = 'coords.json'):
     """
-    Renders a side-by-side HTML view of the original page image and the
-    reconstructed page content from its final JSON file.
+    Renders a flexible, side-by-side HTML view of document annotations.
+
+    Args:
+        json_path (str): Path to the JSON annotation file (e.g., 'final_outputs/1.json').
+        mode (str): View mode. 
+                    "ir" = image vs rendered text
+                    "ij" = image vs raw JSON
+                    "jr" = raw JSON vs rendered text
+        uploads_dir (str): Directory containing original images (default: 'uploads').
+        coords_file (str): File containing coordinate mappings (default: 'coords.json').
     """
+    # Map short mode codes to panels
+    mode_map = {
+        "ir": ("image", "rendered_text"),
+        "ij": ("image", "raw_json"),
+        "jr": ("raw_json", "rendered_text")
+    }
+    left_panel, right_panel = mode_map.get(mode, ("image", "rendered_text"))
+
+    print(f"--- 🖼️  Generating comparison: [{left_panel.upper()}] vs [{right_panel.upper()}] for {os.path.basename(json_path)} ---")
+
+    # --- 1. Load JSON Data ---
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except FileNotFoundError:
-        print(f"❌ Error: File '{json_path}' not found.")
+        print(f"❌ Error: JSON file not found at '{json_path}'")
+        return
+    except json.JSONDecodeError:
+        print(f"❌ Error: Could not parse the JSON file. It might be malformed: '{json_path}'")
         return
 
-    row_id = os.path.splitext(os.path.basename(json_path))[0]
-    img_path = os.path.join('bounded_images', f"{row_id}.jpg")
+    # --- 2. Prepare All Possible Content Blocks ---
+    image_html, raw_json_html, rendered_text_html = "", "", ""
 
-    if not os.path.exists(img_path):
-        print(f"❌ Error: Image file not found at '{img_path}'")
-        return
+    # A. Prepare Image HTML
+    if 'image' in [left_panel, right_panel]:
+        row_id = os.path.splitext(os.path.basename(json_path))[0]
+        img_path = os.path.join('bounded_images', f"{row_id}.jpg")
 
-    image = cv2.imread(img_path)
-    _, buffer = cv2.imencode('.jpg', image)
-    base64_image = base64.b64encode(buffer).decode('utf-8')
+        if os.path.exists(img_path):
+            try:
+                image = cv2.imread(img_path)
+                image_rgb = image
+                _, buffer = cv2.imencode('.jpg', image_rgb)
+                base64_image = base64.b64encode(buffer).decode('utf-8')
+                image_html = f'''
+                    <h3 class="panel-title">Annotated Page Image</h3>
+                    <div class="inner-card">
+                        <img src="data:image/jpeg;base64,{base64_image}" style="width: 100%; border: 1px solid #ccc;">
+                    </div>
+                '''
+            except Exception as e:
+                image_html = f"<p style='color:red;'>⚠️ Could not load image: {e}</p>"
+        else:
+            image_html = f"<p style='color:red;'>❌ Image not found at {img_path}</p>"
 
-    header = data.get("Page header", "")
-    page_text = data.get("Page text", "").replace('\n', '<br>')
-    footer = data.get("Page footer", "")
+    # B. Prepare Raw JSON HTML
+    if 'raw_json' in [left_panel, right_panel]:
+        pretty_json = json.dumps(data, indent=2, ensure_ascii=False)
+        escaped_json = pretty_json.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        raw_json_html = f'''
+            <h3 class="panel-title">Raw JSON Content</h3>
+            <div class="inner-card">
+                <pre style="white-space: pre-wrap; word-wrap: break-word;"><code>{escaped_json}</code></pre>
+            </div>
+        '''
 
-    html_content = f"""
-    <div style="display: flex; gap: 20px; font-family: sans-serif;">
-        <div style="flex: 1; border: 1px solid #ddd; padding: 10px;">
-            <h3 style="text-align: center;">Annotated Page Image</h3>
-            <img src="data:image/jpeg;base64,{base64_image}" style="width: 100%;">
-        </div>
-        <div style="flex: 1; border: 1px solid #ddd; padding: 10px;">
-            <h3 style="text-align: center;">Reconstructed Page Preview</h3>
-            <div style="background: #f5f5f5; padding: 10px; margin-bottom: 10px; border-radius: 4px;"><b>Header:</b> {header}</div>
-            <div style="line-height: 1.6;">{page_text}</div>
-            <div style="background: #f5f5f5; padding: 10px; margin-top: 10px; border-radius: 4px; font-size: 0.9em;"><b>Footer:</b> {footer}</div>
-        </div>
-    </div>
+    # C. Prepare Rendered Text HTML
+    if 'rendered_text' in [left_panel, right_panel]:
+        header = (data.get("Page header") or "").strip()
+        page_text = (data.get("Page text") or "No 'Page text' found in JSON.").strip()
+        footer = (data.get("Page footer") or "").strip()
+
+        processed_text = page_text.replace('\\(', '$').replace('\\)', '$')
+        processed_text = processed_text.replace('\\[', '$$').replace('\\]', '$$')
+
+        pattern = re.compile(r"\$\$(.*?)\$\$\s*?\n\s*?\((\d+)\)", re.DOTALL)
+        final_text = pattern.sub(r"$$\1 \\tag{\2}$$", processed_text)
+        final_text = final_text.replace('\n', '<br>')
+        
+        rendered_parts = []
+        if header:
+            rendered_parts.append(f'<div class="header-section">{header}</div>')
+        rendered_parts.append(f'<div class="rendered-body">{final_text}</div>')
+        if footer:
+            rendered_parts.append(f'<div class="footer-section">{footer}</div>')
+        
+        rendered_content = ''.join(rendered_parts)
+
+        rendered_text_html = f'''
+            <h3 class="panel-title">Rendered Document Preview</h3>
+            <div class="inner-card">{rendered_content}</div>
+        '''
+
+    # --- 3. Assemble the Final HTML View ---
+    content_map = {
+        'image': image_html,
+        'raw_json': raw_json_html,
+        'rendered_text': rendered_text_html
+    }
+    left_html = content_map.get(left_panel, "Invalid left_panel choice")
+    right_html = content_map.get(right_panel, "Invalid right_panel choice")
+
+    mathjax_scripts = ""
+    if 'rendered_text' in [left_panel, right_panel]:
+        mathjax_scripts = """
+        <script>
+          window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], tags: 'ams', tagSide: 'right', tagIndent: '0.8em' },
+            chtml: { scale: 1.05 }
+          };
+        </script>
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+        """
+
+    full_html = f"""
+    <html><head>{mathjax_scripts}<style>
+        .container {{ display: flex; gap: 20px; font-family: 'Times New Roman', 'Times', serif; }}
+        
+        .panel {{ 
+            flex: 1; 
+            border: 1px solid #ddd; 
+            padding: 15px; 
+            border-radius: 8px; 
+            overflow-x: auto; 
+            background-color: #fdfdfd; 
+        }}
+        
+        .panel-title {{
+            text-align: center;
+            font-family: sans-serif;
+            margin: 0 0 15px 0;
+            font-weight: 600;
+        }}
+
+        .inner-card {{
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: #fff;
+        }}
+        
+        .document-container {{ margin: 0; padding: 0; }}
+        
+        .rendered-body {{ 
+            text-align: justify; 
+            line-height: 1.8; 
+            font-size: 18px; 
+            color: #000;
+        }}
+        
+        .header-section {{
+            margin-bottom: 15px;
+            font-size: 18px;
+            color: #000;
+            text-align: left;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }}
+        
+        .footer-section {{
+            margin-top: 20px;
+            font-size: 18px;
+            color: #000;
+            text-align: center;
+            line-height: 1.2;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }}
+        
+        .document-container > *:last-child {{
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+        }}
+        
+        mjx-container[jax="CHTML"][display="true"] {{ margin: 1.5em 0; }}
+    </style></head><body><div class="container">
+        <div class="panel">{left_html}</div>
+        <div class="panel">{right_html}</div>
+    </div></body></html>
     """
-    display(HTML(html_content))
+    display(HTML(full_html))
+
 
 # ==================== HELPER & EDITOR FUNCTIONS ====================
 
@@ -186,44 +334,106 @@ def detect_image_regions(image: np.ndarray, min_area_percentage=1.5) -> List[Lis
 def create_annotated_image(
     image: np.ndarray,
     table_boxes: List[List[int]],
-    image_boxes: List[List[int]]
+    image_boxes: List[List[int]],
+    column_boxes: List[List[int]] = None,
+    header_boxes: List[List[int]] = None,
+    footer_boxes: List[List[int]] = None
 ) -> np.ndarray:
-    """Creates annotated image with table and image bounding boxes."""
+    """Creates annotated image with all bounding box types."""
     annotated_img = image.copy()
+
+    # Set defaults
+    column_boxes = column_boxes or []
+    header_boxes = header_boxes or []
+    footer_boxes = footer_boxes or []
 
     # Draw table boxes (red)
     for i, box in enumerate(table_boxes):
-        x, y, w, h = box
-        cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
-        cv2.putText(annotated_img, f"Table {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+        if any(box):  # Skip empty boxes
+            x, y, w, h = box
+            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
+            cv2.putText(annotated_img, f"Table {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
     # Draw image boxes (green)
     for i, box in enumerate(image_boxes):
-        x, y, w, h = box
-        cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 255, 0), 3)
-        cv2.putText(annotated_img, f"Image {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        if any(box):  # Skip empty boxes
+            x, y, w, h = box
+            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 255, 0), 3)
+            cv2.putText(annotated_img, f"Image {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+    # Draw column boxes (blue)
+    for i, box in enumerate(column_boxes):
+        if any(box):  # Skip empty boxes
+            x, y, w, h = box
+            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 0, 0), 3)
+            cv2.putText(annotated_img, f"Column {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+
+    # Draw header boxes (cyan)
+    for i, box in enumerate(header_boxes):
+        if any(box):  # Skip empty boxes
+            x, y, w, h = box
+            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 255, 0), 3)
+            cv2.putText(annotated_img, f"Header {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 0), 2)
+
+    # Draw footer boxes (magenta)
+    for i, box in enumerate(footer_boxes):
+        if any(box):  # Skip empty boxes
+            x, y, w, h = box
+            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 0, 255), 3)
+            cv2.putText(annotated_img, f"Footer {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 255), 2)
 
     return annotated_img
 
 def create_context_image(
     image: np.ndarray,
     context_table_boxes: List[Tuple[List[int], int]],  # (box, original_index)
-    context_image_boxes: List[Tuple[List[int], int]]   # (box, original_index)
+    context_image_boxes: List[Tuple[List[int], int]],   # (box, original_index)
+    context_column_boxes: List[Tuple[List[int], int]] = None,
+    context_header_boxes: List[Tuple[List[int], int]] = None,
+    context_footer_boxes: List[Tuple[List[int], int]] = None
 ) -> np.ndarray:
     """Creates image with context boxes (all boxes except the one being edited)."""
     context_img = image.copy()
 
+    # Set defaults
+    context_column_boxes = context_column_boxes or []
+    context_header_boxes = context_header_boxes or []
+    context_footer_boxes = context_footer_boxes or []
+
     # Draw context table boxes (red)
     for box, original_idx in context_table_boxes:
-        x, y, w, h = box
-        cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
-        cv2.putText(context_img, f"Table {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        if any(box):
+            x, y, w, h = box
+            cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            cv2.putText(context_img, f"Table {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
     # Draw context image boxes (green)
     for box, original_idx in context_image_boxes:
-        x, y, w, h = box
-        cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv2.putText(context_img, f"Image {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        if any(box):
+            x, y, w, h = box
+            cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.putText(context_img, f"Image {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+    # Draw context column boxes (blue)
+    for box, original_idx in context_column_boxes:
+        if any(box):
+            x, y, w, h = box
+            cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            cv2.putText(context_img, f"Column {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+
+    # Draw context header boxes (cyan)
+    for box, original_idx in context_header_boxes:
+        if any(box):
+            x, y, w, h = box
+            cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 255, 0), 2)
+            cv2.putText(context_img, f"Header {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+
+    # Draw context footer boxes (magenta)
+    for box, original_idx in context_footer_boxes:
+        if any(box):
+            x, y, w, h = box
+            cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 0, 255), 2)
+            cv2.putText(context_img, f"Footer {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
 
     return context_img
 
@@ -387,10 +597,13 @@ def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_t
 
 # ==================== STAGE 1: UPLOAD, DETECT, & EDIT ====================
 
-def save_coords(row_id, filename, table_coords_xywh, image_coords_xywh):
+def save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh):
     """Helper: Save current coords to coords.json after each edit (append mode)."""
     table_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in table_coords_xywh]
     image_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in image_coords_xywh]
+    column_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in column_coords_xywh]
+    header_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in header_coords_xywh]
+    footer_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in footer_coords_xywh]
 
     # Load existing coords if file exists
     if os.path.exists('coords.json'):
@@ -406,7 +619,10 @@ def save_coords(row_id, filename, table_coords_xywh, image_coords_xywh):
     all_coords[row_id] = {
         "original_filename": filename,
         "tables": table_coords_yminmax,
-        "images": image_coords_yminmax
+        "images": image_coords_yminmax,
+        "columns": column_coords_yminmax,
+        "headers": header_coords_yminmax,
+        "footers": footer_coords_yminmax
     }
 
     # Save back to file
@@ -416,8 +632,11 @@ def save_coords(row_id, filename, table_coords_xywh, image_coords_xywh):
     # Count only non-empty
     n_tables = sum(1 for b in table_coords_yminmax if b)
     n_images = sum(1 for b in image_coords_yminmax if b)
+    n_columns = sum(1 for b in column_coords_yminmax if b)
+    n_headers = sum(1 for b in header_coords_yminmax if b)
+    n_footers = sum(1 for b in footer_coords_yminmax if b)
 
-    print(f"💾 Updated coords.json → {row_id} ({n_tables} tables, {n_images} images)")
+    print(f"💾 Updated coords.json → {row_id} ({n_tables} tables, {n_images} images, {n_columns} columns, {n_headers} headers, {n_footers} footers)")
 
 
 def stage_1():
@@ -484,17 +703,27 @@ def process_single_image(filename, filepath, row_id):
     # Detect on original image, then scale for display
     table_coords_xywh = detect_tables(original_img)
     image_coords_xywh = detect_image_regions(original_img)
+    column_coords_xywh = []  # Start empty, user will add manually
+    header_coords_xywh = []  # Start empty, user will add manually  
+    footer_coords_xywh = []  # Start empty, user will add manually
 
     table_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)]
                             for x, y, w, h in table_coords_xywh]
     image_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)]
                             for x, y, w, h in image_coords_xywh]
+    column_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)]
+                            for x, y, w, h in column_coords_xywh]
+    header_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)]
+                            for x, y, w, h in header_coords_xywh]
+    footer_coords_display = [[int(x * scale), int(y * scale), int(w * scale), int(h * scale)]
+                            for x, y, w, h in footer_coords_xywh]
 
     print(f"✅ Found {len(table_coords_xywh)} tables and {len(image_coords_xywh)} images.")
 
     # === LOOP FOR MULTIPLE EDITS ===
     while True:
-        final_annotated = create_annotated_image(display_img, table_coords_display, image_coords_display)
+        final_annotated = create_annotated_image(display_img, table_coords_display, image_coords_display, 
+                                                column_coords_display, header_coords_display, footer_coords_display)
         comparison = np.hstack((display_img, final_annotated))
         cv2_imshow(comparison)
 
@@ -503,12 +732,15 @@ def process_single_image(filename, filepath, row_id):
         print("\n" + "=" * 50)
         print("ACTION MENU")
         print("=" * 50)
-
+        
         choice = input(
             "❓ What would you like to do?\n"
             f"  - To edit a table, type 'table 1' to 'table {len(table_coords_display)}'\n"
             f"  - To edit an image, type 'image 1' to 'image {len(image_coords_display)}'\n"
-            "  - To ADD a new box, type 'add table' or 'add image'\n"
+            f"  - To edit a column, type 'column 1' to 'column {len(column_coords_display)}'\n"
+            f"  - To edit a header, type 'header 1' to 'header {len(header_coords_display)}'\n"
+            f"  - To edit a footer, type 'footer 1' to 'footer {len(footer_coords_display)}'\n"
+            "  - To ADD a new box, type 'add table', 'add image', 'add column', 'add header', or 'add footer'\n"
             "  - Type 'done' to approve all and finish.\n\n"
             "Your choice: "
         ).strip().lower()
@@ -516,14 +748,14 @@ def process_single_image(filename, filepath, row_id):
         # === 1. Handle DONE ===
         if choice == "done":
             # ✅ Make sure we save results before breaking
-            save_coords(row_id, filename, table_coords_xywh, image_coords_xywh)
+            save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
             break
 
         # === 2. Handle ADD ===
         if choice.startswith("add "):
             _, add_type = choice.split()
-            if add_type not in ["table", "image"]:
-                print("❌ Invalid add type. Use 'add table' or 'add image'.")
+            if add_type not in ["table", "image", "column", "header", "footer"]:
+                print("❌ Invalid add type. Use 'add table', 'add image', 'add column', 'add header', or 'add footer'.")
                 continue
 
             # Build context
@@ -539,10 +771,19 @@ def process_single_image(filename, filepath, row_id):
                     if add_type == "table":
                         table_coords_display.append(cb)
                         table_coords_xywh.append([int(v / scale) for v in cb])
-                    else:
+                    elif add_type == "image":
                         image_coords_display.append(cb)
                         image_coords_xywh.append([int(v / scale) for v in cb])
-                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh)
+                    elif add_type == "column":
+                        column_coords_display.append(cb)
+                        column_coords_xywh.append([int(v / scale) for v in cb])
+                    elif add_type == "header":
+                        header_coords_display.append(cb)
+                        header_coords_xywh.append([int(v / scale) for v in cb])
+                    elif add_type == "footer":
+                        footer_coords_display.append(cb)
+                        footer_coords_xywh.append([int(v / scale) for v in cb])
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
             else:
                 print("⚠️ No box added.")
 
@@ -565,8 +806,8 @@ def process_single_image(filename, filepath, row_id):
                     print("❌ Invalid format. Use 'table 1' or 'image 2'.")
                     continue
                 box_type, box_index = parts[0], int(parts[1]) - 1
-                if box_type not in ["table", "image"]:
-                    print("❌ Invalid type. Use 'table' or 'image'.")
+                if box_type not in ["table", "image", "column", "header", "footer"]:
+                    print("❌ Invalid type. Use 'table', 'image', 'column', 'header', or 'footer'.")
                     continue
 
             # === TABLE EDITING ===
@@ -600,10 +841,10 @@ def process_single_image(filename, filepath, row_id):
                     table_coords_display[box_index] = [0, 0, 0, 0]
                     table_coords_xywh[box_index] = [0, 0, 0, 0]
 
-                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh)
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
 
             # === IMAGE EDITING ===
-            else:
+            elif box_type == "image":
                 if not (0 <= box_index < len(image_coords_display)):
                     print(f"❌ Image {box_index+1} doesn't exist.")
                     continue
@@ -630,13 +871,116 @@ def process_single_image(filename, filepath, row_id):
                     image_coords_display[box_index] = [0, 0, 0, 0]
                     image_coords_xywh[box_index] = [0, 0, 0, 0]
 
-                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh)
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
+
+            # === COLUMN EDITING ===
+            elif box_type == "column":
+                if not (0 <= box_index < len(column_coords_display)):
+                    print(f"❌ Column {box_index+1} doesn't exist.")
+                    continue
+
+                context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display)]
+                context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display)]
+                context_column_boxes = [(box, i) for i, box in enumerate(column_coords_display) if i != box_index]
+                context_header_boxes = [(box, i) for i, box in enumerate(header_coords_display)]
+                context_footer_boxes = [(box, i) for i, box in enumerate(footer_coords_display)]
+                context_img = create_context_image(display_img, context_table_boxes, context_image_boxes,
+                                                 context_column_boxes, context_header_boxes, context_footer_boxes)
+
+                print(f"\n✏️ Editing Column {box_index+1}...")
+                corrected_boxes = interactive_editor(context_img, [column_coords_display[box_index]], f"Column {box_index+1} Editor")
+
+                if corrected_boxes and len(corrected_boxes) > 0:
+                    new_display_boxes = []
+                    new_xywh_boxes = []
+                    for cb in corrected_boxes:
+                        new_display_boxes.append(cb)
+                        new_xywh_boxes.append([int(v / scale) for v in cb])
+
+                    column_coords_display.pop(box_index)
+                    column_coords_xywh.pop(box_index)
+                    column_coords_display.extend(new_display_boxes)
+                    column_coords_xywh.extend(new_xywh_boxes)
+                else:
+                    column_coords_display[box_index] = [0, 0, 0, 0]
+                    column_coords_xywh[box_index] = [0, 0, 0, 0]
+
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
+
+            # === HEADER EDITING ===
+            elif box_type == "header":
+                if not (0 <= box_index < len(header_coords_display)):
+                    print(f"❌ Header {box_index+1} doesn't exist.")
+                    continue
+
+                context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display)]
+                context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display)]
+                context_column_boxes = [(box, i) for i, box in enumerate(column_coords_display)]
+                context_header_boxes = [(box, i) for i, box in enumerate(header_coords_display) if i != box_index]
+                context_footer_boxes = [(box, i) for i, box in enumerate(footer_coords_display)]
+                context_img = create_context_image(display_img, context_table_boxes, context_image_boxes,
+                                                 context_column_boxes, context_header_boxes, context_footer_boxes)
+
+                print(f"\n✏️ Editing Header {box_index+1}...")
+                corrected_boxes = interactive_editor(context_img, [header_coords_display[box_index]], f"Header {box_index+1} Editor")
+
+                if corrected_boxes and len(corrected_boxes) > 0:
+                    new_display_boxes = []
+                    new_xywh_boxes = []
+                    for cb in corrected_boxes:
+                        new_display_boxes.append(cb)
+                        new_xywh_boxes.append([int(v / scale) for v in cb])
+
+                    header_coords_display.pop(box_index)
+                    header_coords_xywh.pop(box_index)
+                    header_coords_display.extend(new_display_boxes)
+                    header_coords_xywh.extend(new_xywh_boxes)
+                else:
+                    header_coords_display[box_index] = [0, 0, 0, 0]
+                    header_coords_xywh[box_index] = [0, 0, 0, 0]
+
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
+
+            # === FOOTER EDITING ===
+            elif box_type == "footer":
+                if not (0 <= box_index < len(footer_coords_display)):
+                    print(f"❌ Footer {box_index+1} doesn't exist.")
+                    continue
+
+                context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display)]
+                context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display)]
+                context_column_boxes = [(box, i) for i, box in enumerate(column_coords_display)]
+                context_header_boxes = [(box, i) for i, box in enumerate(header_coords_display)]
+                context_footer_boxes = [(box, i) for i, box in enumerate(footer_coords_display) if i != box_index]
+                context_img = create_context_image(display_img, context_table_boxes, context_image_boxes,
+                                                 context_column_boxes, context_header_boxes, context_footer_boxes)
+
+                print(f"\n✏️ Editing Footer {box_index+1}...")
+                corrected_boxes = interactive_editor(context_img, [footer_coords_display[box_index]], f"Footer {box_index+1} Editor")
+
+                if corrected_boxes and len(corrected_boxes) > 0:
+                    new_display_boxes = []
+                    new_xywh_boxes = []
+                    for cb in corrected_boxes:
+                        new_display_boxes.append(cb)
+                        new_xywh_boxes.append([int(v / scale) for v in cb])
+
+                    footer_coords_display.pop(box_index)
+                    footer_coords_xywh.pop(box_index)
+                    footer_coords_display.extend(new_display_boxes)
+                    footer_coords_xywh.extend(new_xywh_boxes)
+                else:
+                    footer_coords_display[box_index] = [0, 0, 0, 0]
+                    footer_coords_xywh[box_index] = [0, 0, 0, 0]
+
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
 
         except Exception as e:
             print(f"❌ Error: {e}")
 
     # === FINAL SAVE ===
-    final_annotated_img = create_annotated_image(original_img, table_coords_xywh, image_coords_xywh)
+    final_annotated_img = create_annotated_image(original_img, table_coords_xywh, image_coords_xywh,
+                                                 column_coords_xywh, header_coords_xywh, footer_coords_xywh)
     bounded_path = os.path.join('bounded_images', f"{row_id}.jpg")
     cv2.imwrite(bounded_path, final_annotated_img)
 
@@ -821,22 +1165,49 @@ def stage_3(
 
         1. **Layout Detection & Reading Order:**
             * Accurately identify the layout: `single_column`, `two_column`, `three_column`, or `four_column`.
-            * Blue vertical lines on the image are visual guides for column boundaries.
-            * For multi-column layouts, extract the ENTIRE first column (leftmost) from top to bottom, THEN the ENTIRE second column, and so on. DO NOT interleave lines between columns.
+            * **CRITICAL**: If you see text arranged in distinct vertical columns side-by-side, it is a multi-column layout.
+            * **BLUE BOXES** (when present) indicate column boundaries that have been precisely marked for you.
+            * **When NO blue boxes are present**: Use visual analysis to detect columns by looking for:
+                - Vertical white space separating text blocks
+                - Consistent left/right margins creating column boundaries
+                - Text that flows top-to-bottom in separate vertical sections
+            * For multi-column layouts: Extract the ENTIRE first column (leftmost) from top to bottom, THEN the ENTIRE second column, and so on. DO NOT interleave lines between columns.
+            * **MANDATORY**: Complete each column fully before moving to the next column.
 
-        2. **Header and Footer Extraction:**
+        2. **Column-Aware Content Extraction:**
+            * **With blue boxes**: Use them as definitive guides for column boundaries and reading order.
+            * **Without blue boxes**: Identify column breaks by examining text alignment and vertical spacing.
+            * For 2-column layouts: Read left column completely, then right column completely.
+            * Ensure ALL visible text content is captured - do not skip any sections.
+            * Pay special attention to content that might be in the right margin or right column.
+
+        3. **Header and Footer Extraction:**
+            * **ORANGE BOXES** indicate header regions that contain metadata ABOUT the document.
+            * **MAGENTA BOXES** indicate footer regions that contain document metadata.
             * **Decision Rule:** Headers and footers contain metadata ABOUT the document, not THE content OF the document.
-            * **HEADER (Top ~15%):** Page numbers, document titles/IDs (e.g., "NACA RM 56807"), dates, author names, journal titles. Not Figure titles or Table titles.
-            * **FOOTER (Bottom ~15%):** Page numbers, footnotes, copyright notices, references.
-            * **EXCLUDE from Header/Footer:** Section titles (e.g., "RESULTS AND DISCUSSION"), the first paragraph of the main text, table headers, or figure captions should be in "Page text".
+            * **HEADER Content:** 
+                - Document titles/IDs
+                - Page numbers (including those in top corners like "1-25")
+                - Chapter or section identifiers
+            * **FOOTER Content:** Page numbers, footnotes, copyright notices, document-level references.
+            * **CRITICAL**: Include ALL text within header boxes, including page numbers in corners.
+            * **EXCLUDE from Header/Footer:** Section titles, figure captions, table headers, source citations for specific figures/tables.
+            * **CRITICAL**: Source citations that reference specific figures, tables, or content sections belong in "Page text", NOT in footer.
+            * Only extract text that falls within the orange (header) and magenta (footer) boxes.
+        
+        4. **Source Citation Handling:**
+            * Source citations for figures/tables (e.g., "SOURCE: I. V. S. Mullis et al., 2001, Mathematics Benchmarking Report...") belong in "Page text".
+            * Place source citations immediately after the related content (figure, table, or text section).
+            * These citations are content-specific, not document-level metadata.
+            * Only document-wide references or copyright notices go in footer.
 
-        3. **Image Placeholder Insertion:**
-            * Green boxes indicate pre-detected image regions. Your task is to place an `[image]` placeholder in the text where that image logically belongs.
+        5. **Image Placeholder Insertion:**
+            * **GREEN BOXES** indicate pre-detected image regions. Your task is to place an `[image]` placeholder in the text where that image logically belongs.
             * Place the `[image]` placeholder at the nearest paragraph break corresponding to its vertical position in the reading order.
             * The image's caption text (e.g., "FIGURE 12. Displacement of pipeline...") must be included in the "Page text" immediately after the `[image]` placeholder, as it appears in the document.
             * The number of `[image]` placeholders MUST match the number of green boxes.
 
-        4. **Mathematical Content (LaTeX Formatting):**
+        6. **Mathematical Content (LaTeX Formatting):**
             * **MANDATORY:** All mathematical expressions MUST be in LaTeX format.
             * Use `\[ ... \]` for display equations (equations on their own line).
             * Use `\( ... \)` for inline equations (equations within a line of text).
@@ -844,31 +1215,56 @@ def stage_3(
                 * **Correct:** `"\\(x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\\)"`
                 * **Incorrect:** `"\(x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}\)"`
 
-        5. **Table Extraction:**
-            * Red boxes indicate pre-detected table regions. Your task is to extract the table content.
+        7. **Table Extraction (CRITICAL):**
+            * **RED BOXES** indicate pre-detected table regions. Your task is to extract the table content.
             * Extract all tables into clean, standard HTML `<table>` format.
             * Use `<thead>`, `<tbody>`, `<tr>`, `<th>`, and `<td>`.
             * If a header spans multiple rows or columns, explicitly use rowspan or colspan (instead of leaving empty <th> tags).
             * Ensure the number of columns in the header matches the number of data columns.
             * Place the entire `<table>...</table>` string in the "Page text" where it appears in the reading order.
 
-        NOTE:
-            **Visual Cues:**
-            * **Red Boxes:** These indicate tables. Your task is to extract the table content.
-            * **Green Boxes:** These indicate images. Place an `[image]` placeholder in the text where the image logically belongs. The image's caption must be included in the "Page text" right after the placeholder.
+        8. **Content Completeness:**
+            * Extract ALL visible text content from the document - do not skip any sections.
+            * **CRITICAL**: Check all four edges of the image for text content, especially bottom margins.
+            * If text appears to be cut off or incomplete, note this but extract what is visible.
+            * Ensure tables are completely extracted with all visible rows and columns.
+            * Double-check that content from all columns has been captured.
+            * Source citations and references must be included even if they appear in margins.
+            * Small or faded text is still important - extract all readable content.
 
+        9. **Edge Content Detection:**
+            * Pay special attention to content at the very top and bottom edges of the document.
+            * Source citations for figures/tables often appear at bottom margins - these go in "Page text".
+            * Look for small text, italicized text, or different formatting that might indicate source material.
+            * Common patterns: "SOURCE:", "Note:", author citations, publication references.
+            * **IMPORTANT**: Figure/table sources go in "Page text", not footer, even if they appear at document bottom.
+            * Document-level footers (page numbers, copyright) go in "Page footer".
+            * Scan the entire image area systematically - do not ignore edge regions.
+
+        **VISUAL CUES SUMMARY:**
+        * **RED BOXES:** Tables - Extract table content as HTML
+        * **GREEN BOXES:** Images - Place `[image]` placeholder + caption in text
+        * **BLUE BOXES:** Columns - Define reading order and column boundaries  
+        * **CYAN BOXES:** Headers - Extract header metadata
+        * **MAGENTA BOXES:** Footers - Extract footer metadata
+
+        **EXTRACTION PRIORITY:**
+        1. First, identify headers (cyan boxes) and footers (magenta boxes)
+        2. Then, follow column order (blue boxes) for main content
+        3. Insert image placeholders (green boxes) at appropriate positions
+        4. Extract tables (red boxes) in their reading order position
 
         **OUTPUT FORMAT (Strictly JSON):**
         Return ONLY a valid JSON object. Do not include any introductory text, explanations, or markdown code fences like ```json.
-        
+
         {
           "layout_type": "single_column | two_column | three_column | four_column",
-          "Page header": "Text of the page header.",
-          "Page text": "All body content, including [image] placeholders, LaTeX math, and HTML tables, in correct reading order.",
-          "Page footer": "Text of the page footer."
+          "Page header": "Text from cyan header boxes.",
+          "Page text": "All body content from blue column boxes, including [image] placeholders, LaTeX math, and HTML tables, in correct reading order.",
+          "Page footer": "Text from magenta footer boxes."
         }
         """
-
+        
     # --- 4. Initialize Model and Load Data ---
     model = genai.GenerativeModel(
         model_name=chosen_model,
