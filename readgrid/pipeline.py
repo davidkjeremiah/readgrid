@@ -339,7 +339,7 @@ def create_annotated_image(
     header_boxes: List[List[int]] = None,
     footer_boxes: List[List[int]] = None
 ) -> np.ndarray:
-    """Creates annotated image with all bounding box types."""
+    """Creates annotated image with all bounding box types with proper sequential labeling."""
     annotated_img = image.copy()
 
     # Set defaults
@@ -347,40 +347,42 @@ def create_annotated_image(
     header_boxes = header_boxes or []
     footer_boxes = footer_boxes or []
 
-    # Draw table boxes (red)
-    for i, box in enumerate(table_boxes):
-        if any(box):  # Skip empty boxes
-            x, y, w, h = box
-            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
-            cv2.putText(annotated_img, f"Table {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+    # Filter out empty/invalid boxes before drawing and use sequential numbering
+    
+    # Draw table boxes (red) - only valid boxes, numbered sequentially
+    valid_table_boxes = [box for box in table_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, box in enumerate(valid_table_boxes):
+        x, y, w, h = box
+        cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
+        cv2.putText(annotated_img, f"Table {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
-    # Draw image boxes (green)
-    for i, box in enumerate(image_boxes):
-        if any(box):  # Skip empty boxes
-            x, y, w, h = box
-            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 255, 0), 3)
-            cv2.putText(annotated_img, f"Image {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+    # Draw image boxes (green) - only valid boxes, numbered sequentially
+    valid_image_boxes = [box for box in image_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, box in enumerate(valid_image_boxes):
+        x, y, w, h = box
+        cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 255, 0), 3)
+        cv2.putText(annotated_img, f"Image {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
-    # Draw column boxes (blue)
-    for i, box in enumerate(column_boxes):
-        if any(box):  # Skip empty boxes
-            x, y, w, h = box
-            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 0, 0), 3)
-            cv2.putText(annotated_img, f"Column {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+    # Draw column boxes (blue) - only valid boxes, numbered sequentially
+    valid_column_boxes = [box for box in column_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, box in enumerate(valid_column_boxes):
+        x, y, w, h = box
+        cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 0, 0), 3)
+        cv2.putText(annotated_img, f"Column {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
 
-    # Draw header boxes (cyan)
-    for i, box in enumerate(header_boxes):
-        if any(box):  # Skip empty boxes
-            x, y, w, h = box
-            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 255, 0), 3)
-            cv2.putText(annotated_img, f"Header {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 0), 2)
+    # Draw header boxes (cyan) - only valid boxes, numbered sequentially
+    valid_header_boxes = [box for box in header_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, box in enumerate(valid_header_boxes):
+        x, y, w, h = box
+        cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 255, 0), 3)
+        cv2.putText(annotated_img, f"Header {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 0), 2)
 
-    # Draw footer boxes (magenta)
-    for i, box in enumerate(footer_boxes):
-        if any(box):  # Skip empty boxes
-            x, y, w, h = box
-            cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 0, 255), 3)
-            cv2.putText(annotated_img, f"Footer {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 255), 2)
+    # Draw footer boxes (magenta) - only valid boxes, numbered sequentially
+    valid_footer_boxes = [box for box in footer_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, box in enumerate(valid_footer_boxes):
+        x, y, w, h = box
+        cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 0, 255), 3)
+        cv2.putText(annotated_img, f"Footer {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 255), 2)
 
     return annotated_img
 
@@ -392,7 +394,7 @@ def create_context_image(
     context_header_boxes: List[Tuple[List[int], int]] = None,
     context_footer_boxes: List[Tuple[List[int], int]] = None
 ) -> np.ndarray:
-    """Creates image with context boxes (all boxes except the one being edited)."""
+    """Creates image with context boxes (all boxes except the one being edited) with proper sequential labeling."""
     context_img = image.copy()
 
     # Set defaults
@@ -400,45 +402,52 @@ def create_context_image(
     context_header_boxes = context_header_boxes or []
     context_footer_boxes = context_footer_boxes or []
 
-    # Draw context table boxes (red)
-    for box, original_idx in context_table_boxes:
-        if any(box):
-            x, y, w, h = box
-            cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            cv2.putText(context_img, f"Table {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    # Filter out empty/invalid boxes and use sequential numbering for each type
+    
+    # Draw context table boxes (red) - filter and renumber sequentially
+    valid_context_tables = [(box, original_idx) for box, original_idx in context_table_boxes 
+                           if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, (box, original_idx) in enumerate(valid_context_tables):
+        x, y, w, h = box
+        cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
+        cv2.putText(context_img, f"Table {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-    # Draw context image boxes (green)
-    for box, original_idx in context_image_boxes:
-        if any(box):
-            x, y, w, h = box
-            cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            cv2.putText(context_img, f"Image {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    # Draw context image boxes (green) - filter and renumber sequentially
+    valid_context_images = [(box, original_idx) for box, original_idx in context_image_boxes 
+                           if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, (box, original_idx) in enumerate(valid_context_images):
+        x, y, w, h = box
+        cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv2.putText(context_img, f"Image {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-    # Draw context column boxes (blue)
-    for box, original_idx in context_column_boxes:
-        if any(box):
-            x, y, w, h = box
-            cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-            cv2.putText(context_img, f"Column {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+    # Draw context column boxes (blue) - filter and renumber sequentially
+    valid_context_columns = [(box, original_idx) for box, original_idx in context_column_boxes 
+                            if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, (box, original_idx) in enumerate(valid_context_columns):
+        x, y, w, h = box
+        cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        cv2.putText(context_img, f"Column {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-    # Draw context header boxes (cyan)
-    for box, original_idx in context_header_boxes:
-        if any(box):
-            x, y, w, h = box
-            cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 255, 0), 2)
-            cv2.putText(context_img, f"Header {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+    # Draw context header boxes (cyan) - filter and renumber sequentially
+    valid_context_headers = [(box, original_idx) for box, original_idx in context_header_boxes 
+                            if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, (box, original_idx) in enumerate(valid_context_headers):
+        x, y, w, h = box
+        cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 255, 0), 2)
+        cv2.putText(context_img, f"Header {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
-    # Draw context footer boxes (magenta)
-    for box, original_idx in context_footer_boxes:
-        if any(box):
-            x, y, w, h = box
-            cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 0, 255), 2)
-            cv2.putText(context_img, f"Footer {original_idx + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+    # Draw context footer boxes (magenta) - filter and renumber sequentially
+    valid_context_footers = [(box, original_idx) for box, original_idx in context_footer_boxes 
+                            if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
+    for i, (box, original_idx) in enumerate(valid_context_footers):
+        x, y, w, h = box
+        cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 0, 255), 2)
+        cv2.putText(context_img, f"Footer {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
 
     return context_img
 
 def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_title: str) -> List[List[int]]:
-    """Launches the HTML/JS editor for editing multiple bounding boxes."""
+    """Launches the HTML/JS editor for editing multiple bounding boxes with drag-to-resize functionality."""
 
     _, buffer = cv2.imencode('.png', img)
     img_str = base64.b64encode(buffer).decode('utf-8')
@@ -452,8 +461,9 @@ def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_t
     <div style="border: 2px solid #ccc; padding: 10px; display: inline-block;">
         <h3 style="font-family: sans-serif;">{editor_title}</h3>
         <p style="font-family: sans-serif; margin-top: 0; line-height: 1.4;">
-            <b>Click and drag</b> to draw a box.<br>
+            <b>Click and drag</b> to draw a new box.<br>
             <b>Click inside a box</b> to delete it.<br>
+            <b>Drag box edges/corners</b> to resize existing boxes.<br>
             <b>Use ↩️ Undo Last</b> to remove the most recent box.<br>
             You can draw multiple boxes before submitting.
         </p>
@@ -475,7 +485,11 @@ def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_t
     window.finalBoxes = [];
     let boxes = JSON.parse('{boxes_json}');
     let isDrawing = false;
+    let isResizing = false;
+    let resizeHandle = null;
+    let resizeBoxIndex = -1;
     let startX, startY;
+    let currentCursor = 'crosshair';
 
     function updateStatus(message) {{ status.textContent = message; }}
 
@@ -490,34 +504,191 @@ def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_t
     function redraw() {{
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0);
-        ctx.strokeStyle = 'blue';
-        ctx.lineWidth = 2;
+        
+        // Draw all boxes
         boxes.forEach(([x, y, w, h], idx) => {{
+            // Draw the main box
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 2;
             ctx.strokeRect(x, y, w, h);
+            
+            // Draw resize handles (small squares at corners and edges)
+            ctx.fillStyle = 'blue';
+            const handleSize = 6;
+            const handles = [
+                [x - handleSize/2, y - handleSize/2], // top-left
+                [x + w/2 - handleSize/2, y - handleSize/2], // top-center
+                [x + w - handleSize/2, y - handleSize/2], // top-right
+                [x + w - handleSize/2, y + h/2 - handleSize/2], // right-center
+                [x + w - handleSize/2, y + h - handleSize/2], // bottom-right
+                [x + w/2 - handleSize/2, y + h - handleSize/2], // bottom-center
+                [x - handleSize/2, y + h - handleSize/2], // bottom-left
+                [x - handleSize/2, y + h/2 - handleSize/2], // left-center
+            ];
+            
+            handles.forEach(([hx, hy]) => {{
+                ctx.fillRect(hx, hy, handleSize, handleSize);
+            }});
+            
+            // Label each box
             ctx.fillStyle = "blue";
             ctx.font = "14px sans-serif";
-            ctx.fillText(idx+1, x+5, y+20); // label each box
+            ctx.fillText(idx+1, x+5, y+20);
         }});
+        
         updateStatus(`Current boxes: ${{boxes.length}}`);
     }}
+
+    function getResizeHandle(mouseX, mouseY, boxIndex) {{
+        if (boxIndex === -1) return null;
+        
+        const [x, y, w, h] = boxes[boxIndex];
+        const handleSize = 6;
+        const tolerance = 3;
+        
+        const handles = [
+            {{name: 'nw', x: x, y: y, cursor: 'nw-resize'}},
+            {{name: 'n', x: x + w/2, y: y, cursor: 'n-resize'}},
+            {{name: 'ne', x: x + w, y: y, cursor: 'ne-resize'}},
+            {{name: 'e', x: x + w, y: y + h/2, cursor: 'e-resize'}},
+            {{name: 'se', x: x + w, y: y + h, cursor: 'se-resize'}},
+            {{name: 's', x: x + w/2, y: y + h, cursor: 's-resize'}},
+            {{name: 'sw', x: x, y: y + h, cursor: 'sw-resize'}},
+            {{name: 'w', x: x, y: y + h/2, cursor: 'w-resize'}}
+        ];
+        
+        for (let handle of handles) {{
+            if (Math.abs(mouseX - handle.x) <= handleSize/2 + tolerance && 
+                Math.abs(mouseY - handle.y) <= handleSize/2 + tolerance) {{
+                return handle;
+            }}
+        }}
+        
+        return null;
+    }}
+
+    function getBoxAtPosition(mouseX, mouseY) {{
+        for (let i = boxes.length - 1; i >= 0; i--) {{
+            const [x, y, w, h] = boxes[i];
+            if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h) {{
+                return i;
+            }}
+        }}
+        return -1;
+    }}
+
+    function updateCursor(mouseX, mouseY) {{
+        const boxIndex = getBoxAtPosition(mouseX, mouseY);
+        const handle = getResizeHandle(mouseX, mouseY, boxIndex);
+        
+        if (handle) {{
+            canvas.style.cursor = handle.cursor;
+            currentCursor = handle.cursor;
+        }} else if (boxIndex !== -1) {{
+            canvas.style.cursor = 'pointer';
+            currentCursor = 'pointer';
+        }} else {{
+            canvas.style.cursor = 'crosshair';
+            currentCursor = 'crosshair';
+        }}
+    }}
+
+    canvas.addEventListener('mousemove', (e) => {{
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        if (isDrawing) {{
+            // Drawing new box
+            redraw();
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(startX, startY, mouseX - startX, mouseY - startY);
+        }} else if (isResizing && resizeBoxIndex !== -1) {{
+            // Resizing existing box
+            const [origX, origY, origW, origH] = boxes[resizeBoxIndex];
+            let newX = origX, newY = origY, newW = origW, newH = origH;
+            
+            switch (resizeHandle.name) {{
+                case 'nw':
+                    newX = mouseX;
+                    newY = mouseY;
+                    newW = origX + origW - mouseX;
+                    newH = origY + origH - mouseY;
+                    break;
+                case 'n':
+                    newY = mouseY;
+                    newH = origY + origH - mouseY;
+                    break;
+                case 'ne':
+                    newY = mouseY;
+                    newW = mouseX - origX;
+                    newH = origY + origH - mouseY;
+                    break;
+                case 'e':
+                    newW = mouseX - origX;
+                    break;
+                case 'se':
+                    newW = mouseX - origX;
+                    newH = mouseY - origY;
+                    break;
+                case 's':
+                    newH = mouseY - origY;
+                    break;
+                case 'sw':
+                    newX = mouseX;
+                    newW = origX + origW - mouseX;
+                    newH = mouseY - origY;
+                    break;
+                case 'w':
+                    newX = mouseX;
+                    newW = origX + origW - mouseX;
+                    break;
+            }}
+            
+            // Ensure minimum size
+            if (newW < 10) {{
+                newW = 10;
+                if (resizeHandle.name.includes('w')) {{
+                    newX = origX + origW - 10;
+                }}
+            }}
+            if (newH < 10) {{
+                newH = 10;
+                if (resizeHandle.name.includes('n')) {{
+                    newY = origY + origH - 10;
+                }}
+            }}
+            
+            boxes[resizeBoxIndex] = [Math.round(newX), Math.round(newY), Math.round(newW), Math.round(newH)];
+            redraw();
+        }} else {{
+            // Update cursor based on position
+            updateCursor(mouseX, mouseY);
+        }}
+    }});
 
     canvas.addEventListener('mousedown', (e) => {{
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        let boxClicked = -1;
-        for (let i = boxes.length - 1; i >= 0; i--) {{
-            const [x, y, w, h] = boxes[i];
-            if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h) {{
-                boxClicked = i;
-                break;
-            }}
-        }}
-        if (boxClicked !== -1) {{
-            boxes.splice(boxClicked, 1);
+        
+        const boxIndex = getBoxAtPosition(mouseX, mouseY);
+        const handle = getResizeHandle(mouseX, mouseY, boxIndex);
+        
+        if (handle) {{
+            // Start resizing
+            isResizing = true;
+            resizeHandle = handle;
+            resizeBoxIndex = boxIndex;
+            updateStatus('Resizing box...');
+        }} else if (boxIndex !== -1) {{
+            // Delete box
+            boxes.splice(boxIndex, 1);
             redraw();
             updateStatus('Box deleted.');
         }} else {{
+            // Start drawing new box
             isDrawing = true;
             startX = mouseX;
             startY = mouseY;
@@ -525,30 +696,32 @@ def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_t
         }}
     }});
 
-    canvas.addEventListener('mousemove', (e) => {{
-        if (!isDrawing) return;
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        redraw();
-        ctx.strokeStyle = 'red';
-        ctx.strokeRect(startX, startY, mouseX - startX, mouseY - startY);
-    }});
-
     canvas.addEventListener('mouseup', (e) => {{
-        if (!isDrawing) return;
-        isDrawing = false;
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        const x = Math.min(startX, mouseX);
-        const y = Math.min(startY, mouseY);
-        const w = Math.abs(mouseX - startX);
-        const h = Math.abs(mouseY - startY);
-        if (w > 5 && h > 5) {{
-            boxes.push([Math.round(x), Math.round(y), Math.round(w), Math.round(h)]);
+        if (isDrawing) {{
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const x = Math.min(startX, mouseX);
+            const y = Math.min(startY, mouseY);
+            const w = Math.abs(mouseX - startX);
+            const h = Math.abs(mouseY - startY);
+            
+            if (w > 5 && h > 5) {{
+                boxes.push([Math.round(x), Math.round(y), Math.round(w), Math.round(h)]);
+                updateStatus('New box created.');
+            }} else {{
+                updateStatus('Box too small, not created.');
+            }}
+            
+            isDrawing = false;
+            redraw();
+        }} else if (isResizing) {{
+            isResizing = false;
+            resizeHandle = null;
+            resizeBoxIndex = -1;
+            updateStatus('Box resized.');
         }}
-        redraw();
     }});
 
     undoButton.addEventListener('click', () => {{
@@ -588,22 +761,36 @@ def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_t
         time.sleep(0.5)
 
     clear_output(wait=False)
-    if final_boxes is not None and len(final_boxes) > 0:
-        print(f"✅ {len(final_boxes)} manual corrections received!")
-        return final_boxes   # ✅ return all boxes now
+    if final_boxes is not None:
+        if len(final_boxes) > 0:
+            print(f"✅ {len(final_boxes)} box(es) received!")
+        else:
+            print("✅ All boxes removed (empty list submitted).")
+        return final_boxes
     else:
-        print("⚠️ No boxes submitted. Using original box(es)." if initial_boxes else "⚠️ No boxes submitted. No boxes will be saved.")
+        print("⚠️ No response received. Using original box(es)." if initial_boxes else "⚠️ No response received. No boxes will be saved.")
         return initial_boxes if initial_boxes else []
 
 # ==================== STAGE 1: UPLOAD, DETECT, & EDIT ====================
 
 def save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh):
-    """Helper: Save current coords to coords.json after each edit (append mode)."""
-    table_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in table_coords_xywh]
-    image_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in image_coords_xywh]
-    column_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in column_coords_xywh]
-    header_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in header_coords_xywh]
-    footer_coords_yminmax = [xywh_to_yminmax(box) if any(box) else [] for box in footer_coords_xywh]
+    """Helper: Save current coords to coords.json after each edit (append mode) with automatic cleanup."""
+    
+    # Convert to yminmax format and filter out empty/invalid boxes
+    def clean_and_convert(coords_xywh):
+        """Convert xywh to yminmax and remove empty/invalid boxes"""
+        clean_coords = []
+        for box in coords_xywh:
+            # Skip empty boxes, [0,0,0,0] placeholders, or invalid boxes
+            if box and len(box) == 4 and any(box) and box != [0, 0, 0, 0]:
+                clean_coords.append(xywh_to_yminmax(box))
+        return clean_coords
+    
+    table_coords_yminmax = clean_and_convert(table_coords_xywh)
+    image_coords_yminmax = clean_and_convert(image_coords_xywh)
+    column_coords_yminmax = clean_and_convert(column_coords_xywh)
+    header_coords_yminmax = clean_and_convert(header_coords_xywh)
+    footer_coords_yminmax = clean_and_convert(footer_coords_xywh)
 
     # Load existing coords if file exists
     if os.path.exists('coords.json'):
@@ -629,12 +816,12 @@ def save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_c
     with open('coords.json', 'w') as f:
         json.dump(all_coords, f, indent=4)
 
-    # Count only non-empty
-    n_tables = sum(1 for b in table_coords_yminmax if b)
-    n_images = sum(1 for b in image_coords_yminmax if b)
-    n_columns = sum(1 for b in column_coords_yminmax if b)
-    n_headers = sum(1 for b in header_coords_yminmax if b)
-    n_footers = sum(1 for b in footer_coords_yminmax if b)
+    # Count only non-empty boxes for status message
+    n_tables = len(table_coords_yminmax)
+    n_images = len(image_coords_yminmax)
+    n_columns = len(column_coords_yminmax)
+    n_headers = len(header_coords_yminmax)
+    n_footers = len(footer_coords_yminmax)
 
     print(f"💾 Updated coords.json → {row_id} ({n_tables} tables, {n_images} images, {n_columns} columns, {n_headers} headers, {n_footers} footers)")
 
@@ -720,6 +907,45 @@ def process_single_image(filename, filepath, row_id):
 
     print(f"✅ Found {len(table_coords_xywh)} tables and {len(image_coords_xywh)} images.")
 
+    def get_valid_box_mapping(boxes_list):
+            """Returns mapping from visual indices (1,2,3...) to actual array indices."""
+            mapping = {}
+            visual_index = 1
+            for array_index, box in enumerate(boxes_list):
+                if box and len(box) == 4 and any(box) and box != [0,0,0,0]:
+                    mapping[visual_index] = array_index
+                    visual_index += 1
+            return mapping
+
+    def batch_delete_boxes(box_type, visual_numbers, display_coords, xywh_coords):
+        """
+        Delete multiple boxes at once by their visual numbers.
+        Returns updated display_coords and xywh_coords lists.
+        """
+        valid_mapping = get_valid_box_mapping(display_coords)
+        
+        # Validate all visual numbers exist
+        invalid_numbers = [num for num in visual_numbers if num not in valid_mapping]
+        if invalid_numbers:
+            available = list(valid_mapping.keys())
+            print(f"❌ {box_type.title()} {invalid_numbers} don't exist. Available: {available}")
+            return display_coords, xywh_coords
+        
+        # Get actual array indices and sort them in descending order
+        # (delete from highest index to lowest to avoid index shifting issues)
+        array_indices = [valid_mapping[num] for num in visual_numbers]
+        array_indices.sort(reverse=True)
+        
+        print(f"🗑️ Deleting {box_type} boxes: {sorted(visual_numbers)}")
+        
+        # Delete from both arrays
+        for idx in array_indices:
+            display_coords.pop(idx)
+            xywh_coords.pop(idx)
+        
+        return display_coords, xywh_coords
+
+
     # === LOOP FOR MULTIPLE EDITS ===
     while True:
         final_annotated = create_annotated_image(display_img, table_coords_display, image_coords_display, 
@@ -740,6 +966,7 @@ def process_single_image(filename, filepath, row_id):
             f"  - To edit a column, type 'column 1' to 'column {len(column_coords_display)}'\n"
             f"  - To edit a header, type 'header 1' to 'header {len(header_coords_display)}'\n"
             f"  - To edit a footer, type 'footer 1' to 'footer {len(footer_coords_display)}'\n"
+            f"  - To DELETE multiple boxes, type 'delete table 1,2,5' or 'delete image 1,3', etc. \n"
             "  - To ADD a new box, type 'add table', 'add image', 'add column', 'add header', or 'add footer'\n"
             "  - Type 'done' to approve all and finish.\n\n"
             "Your choice: "
@@ -761,7 +988,12 @@ def process_single_image(filename, filepath, row_id):
             # Build context
             context_table_boxes = [(box, i) for i, box in enumerate(table_coords_display)]
             context_image_boxes = [(box, i) for i, box in enumerate(image_coords_display)]
-            context_img = create_context_image(display_img, context_table_boxes, context_image_boxes)
+            context_column_boxes = [(box, i) for i, box in enumerate(column_coords_display)]
+            context_header_boxes = [(box, i) for i, box in enumerate(header_coords_display)]
+            context_footer_boxes = [(box, i) for i, box in enumerate(footer_coords_display)]
+
+            context_img = create_context_image(display_img, context_table_boxes, context_image_boxes,
+                                     context_column_boxes, context_header_boxes, context_footer_boxes)
 
             print(f"\n➕ Adding a new {add_type}...")
             corrected_boxes = interactive_editor(context_img, [], f"New {add_type.capitalize()} Editor")
@@ -788,27 +1020,120 @@ def process_single_image(filename, filepath, row_id):
                 print("⚠️ No box added.")
 
             continue
-        
-        # === 3. Handle EDIT ===
-        try:
-            if choice in ["table", "image"]:
-                box_type = choice
-                box_index = 0
-                if box_type == "table" and len(table_coords_display) > 1:
-                    print("❌ Multiple tables detected. Please specify 'table N'.")
+
+        # === 3. Handle BATCH DELETE ===
+        if choice.startswith("delete "):
+            try:
+                # Parse "delete table 1,2,5" or "delete image 1,3"
+                delete_part = choice[7:]  # Remove "delete "
+                parts = delete_part.split()
+                
+                if len(parts) != 2:
+                    print("❌ Invalid format. Use 'delete table 1,2,5' or 'delete image 1,3'.")
                     continue
-                if box_type == "image" and len(image_coords_display) > 1:
-                    print("❌ Multiple images detected. Please specify 'image N'.")
+                    
+                box_type, numbers_str = parts[0], parts[1]
+                if box_type not in ["table", "image", "column", "header", "footer"]:
+                    print("❌ Invalid type. Use 'table', 'image', 'column', 'header', or 'footer'.")
+                    continue
+                    
+                # Parse the numbers (handle both "1,2,5" and "1 2 5" formats)
+                numbers_str = numbers_str.replace(',', ' ')
+                visual_numbers = [int(x) for x in numbers_str.split()]
+                
+                if not visual_numbers:
+                    print("❌ No numbers provided.")
+                    continue
+                    
+                # Perform batch delete
+                if box_type == "table":
+                    table_coords_display, table_coords_xywh = batch_delete_boxes(
+                        box_type, visual_numbers, table_coords_display, table_coords_xywh)
+                elif box_type == "image":
+                    image_coords_display, image_coords_xywh = batch_delete_boxes(
+                        box_type, visual_numbers, image_coords_display, image_coords_xywh)
+                elif box_type == "column":
+                    column_coords_display, column_coords_xywh = batch_delete_boxes(
+                        box_type, visual_numbers, column_coords_display, column_coords_xywh)
+                elif box_type == "header":
+                    header_coords_display, header_coords_xywh = batch_delete_boxes(
+                        box_type, visual_numbers, header_coords_display, header_coords_xywh)
+                elif box_type == "footer":
+                    footer_coords_display, footer_coords_xywh = batch_delete_boxes(
+                        box_type, visual_numbers, footer_coords_display, footer_coords_xywh)
+                
+                # Save the changes
+                save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, 
+                          column_coords_xywh, header_coords_xywh, footer_coords_xywh)
+                
+                print(f"✅ Batch deletion complete!")
+                continue
+                
+            except ValueError:
+                print("❌ Invalid number format. Use 'delete table 1,2,5'.")
+                continue
+            except Exception as e:
+                print(f"❌ Error during batch delete: {e}")
+                continue
+        
+        # === 4. Handle EDIT ===
+        try:
+            if choice in ["table", "image", "column", "header", "footer"]:
+                box_type = choice
+                
+                # Get the appropriate boxes list
+                if box_type == "table":
+                    current_boxes = table_coords_display
+                elif box_type == "image":
+                    current_boxes = image_coords_display
+                elif box_type == "column":
+                    current_boxes = column_coords_display
+                elif box_type == "header":
+                    current_boxes = header_coords_display
+                elif box_type == "footer":
+                    current_boxes = footer_coords_display
+                    
+                # Check if there's only one valid box
+                valid_mapping = get_valid_box_mapping(current_boxes)
+                if len(valid_mapping) == 0:
+                    print(f"❌ No {box_type} boxes exist.")
+                    continue
+                elif len(valid_mapping) == 1:
+                    box_index = valid_mapping[1]  # Get the actual array index
+                else:
+                    print(f"❌ Multiple {box_type} boxes detected. Please specify '{box_type} N'.")
                     continue
             else:
                 parts = choice.split()
                 if len(parts) != 2:
                     print("❌ Invalid format. Use 'table 1' or 'image 2'.")
                     continue
-                box_type, box_index = parts[0], int(parts[1]) - 1
+                    
+                box_type, visual_number = parts[0], int(parts[1])
                 if box_type not in ["table", "image", "column", "header", "footer"]:
                     print("❌ Invalid type. Use 'table', 'image', 'column', 'header', or 'footer'.")
                     continue
+                    
+                # Get the appropriate boxes list and mapping
+                if box_type == "table":
+                    current_boxes = table_coords_display
+                elif box_type == "image":
+                    current_boxes = image_coords_display
+                elif box_type == "column":
+                    current_boxes = column_coords_display
+                elif box_type == "header":
+                    current_boxes = header_coords_display
+                elif box_type == "footer":
+                    current_boxes = footer_coords_display
+                    
+                valid_mapping = get_valid_box_mapping(current_boxes)
+                
+                if visual_number not in valid_mapping:
+                    print(f"❌ {box_type.title()} {visual_number} doesn't exist. Available: {list(valid_mapping.keys())}")
+                    continue
+                    
+                box_index = valid_mapping[visual_number]  # Convert visual number to actual array index
+                
 
             # === TABLE EDITING ===
             if box_type == "table":
@@ -854,7 +1179,8 @@ def process_single_image(filename, filepath, row_id):
                 context_img = create_context_image(display_img, context_table_boxes, context_image_boxes)
 
                 print(f"\n✏️ Editing Image {box_index+1}...")
-                corrected_boxes = interactive_editor(context_img, [image_coords_display[box_index]], f"Image {box_index+1} Editor")
+                # FIXED: Start with empty canvas like tables do, but show existing box as context
+                corrected_boxes = interactive_editor(context_img, [], f"Image {box_index+1} Editor")
 
                 if corrected_boxes and len(corrected_boxes) > 0:
                     new_display_boxes = []
@@ -868,8 +1194,10 @@ def process_single_image(filename, filepath, row_id):
                     image_coords_display.extend(new_display_boxes)
                     image_coords_xywh.extend(new_xywh_boxes)
                 else:
-                    image_coords_display[box_index] = [0, 0, 0, 0]
-                    image_coords_xywh[box_index] = [0, 0, 0, 0]
+                    # FIXED: Remove the box entirely when no boxes are returned
+                    print("✅ Image box removed.")
+                    image_coords_display.pop(box_index)
+                    image_coords_xywh.pop(box_index)
 
                 save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
 
@@ -885,10 +1213,11 @@ def process_single_image(filename, filepath, row_id):
                 context_header_boxes = [(box, i) for i, box in enumerate(header_coords_display)]
                 context_footer_boxes = [(box, i) for i, box in enumerate(footer_coords_display)]
                 context_img = create_context_image(display_img, context_table_boxes, context_image_boxes,
-                                                 context_column_boxes, context_header_boxes, context_footer_boxes)
+                                                context_column_boxes, context_header_boxes, context_footer_boxes)
 
                 print(f"\n✏️ Editing Column {box_index+1}...")
-                corrected_boxes = interactive_editor(context_img, [column_coords_display[box_index]], f"Column {box_index+1} Editor")
+                # FIXED: Start with empty canvas
+                corrected_boxes = interactive_editor(context_img, [], f"Column {box_index+1} Editor")
 
                 if corrected_boxes and len(corrected_boxes) > 0:
                     new_display_boxes = []
@@ -902,11 +1231,13 @@ def process_single_image(filename, filepath, row_id):
                     column_coords_display.extend(new_display_boxes)
                     column_coords_xywh.extend(new_xywh_boxes)
                 else:
-                    column_coords_display[box_index] = [0, 0, 0, 0]
-                    column_coords_xywh[box_index] = [0, 0, 0, 0]
+                    # FIXED: Remove the box entirely when no boxes are returned
+                    print("✅ Column box removed.")
+                    column_coords_display.pop(box_index)
+                    column_coords_xywh.pop(box_index)
 
                 save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
-
+            
             # === HEADER EDITING ===
             elif box_type == "header":
                 if not (0 <= box_index < len(header_coords_display)):
@@ -919,10 +1250,11 @@ def process_single_image(filename, filepath, row_id):
                 context_header_boxes = [(box, i) for i, box in enumerate(header_coords_display) if i != box_index]
                 context_footer_boxes = [(box, i) for i, box in enumerate(footer_coords_display)]
                 context_img = create_context_image(display_img, context_table_boxes, context_image_boxes,
-                                                 context_column_boxes, context_header_boxes, context_footer_boxes)
+                                                context_column_boxes, context_header_boxes, context_footer_boxes)
 
                 print(f"\n✏️ Editing Header {box_index+1}...")
-                corrected_boxes = interactive_editor(context_img, [header_coords_display[box_index]], f"Header {box_index+1} Editor")
+                # FIXED: Start with empty canvas
+                corrected_boxes = interactive_editor(context_img, [], f"Header {box_index+1} Editor")
 
                 if corrected_boxes and len(corrected_boxes) > 0:
                     new_display_boxes = []
@@ -936,8 +1268,10 @@ def process_single_image(filename, filepath, row_id):
                     header_coords_display.extend(new_display_boxes)
                     header_coords_xywh.extend(new_xywh_boxes)
                 else:
-                    header_coords_display[box_index] = [0, 0, 0, 0]
-                    header_coords_xywh[box_index] = [0, 0, 0, 0]
+                    # FIXED: Remove the box entirely when no boxes are returned
+                    print("✅ Header box removed.")
+                    header_coords_display.pop(box_index)
+                    header_coords_xywh.pop(box_index)
 
                 save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
 
@@ -953,10 +1287,11 @@ def process_single_image(filename, filepath, row_id):
                 context_header_boxes = [(box, i) for i, box in enumerate(header_coords_display)]
                 context_footer_boxes = [(box, i) for i, box in enumerate(footer_coords_display) if i != box_index]
                 context_img = create_context_image(display_img, context_table_boxes, context_image_boxes,
-                                                 context_column_boxes, context_header_boxes, context_footer_boxes)
+                                                context_column_boxes, context_header_boxes, context_footer_boxes)
 
                 print(f"\n✏️ Editing Footer {box_index+1}...")
-                corrected_boxes = interactive_editor(context_img, [footer_coords_display[box_index]], f"Footer {box_index+1} Editor")
+                # FIXED: Start with empty canvas
+                corrected_boxes = interactive_editor(context_img, [], f"Footer {box_index+1} Editor")
 
                 if corrected_boxes and len(corrected_boxes) > 0:
                     new_display_boxes = []
@@ -970,8 +1305,10 @@ def process_single_image(filename, filepath, row_id):
                     footer_coords_display.extend(new_display_boxes)
                     footer_coords_xywh.extend(new_xywh_boxes)
                 else:
-                    footer_coords_display[box_index] = [0, 0, 0, 0]
-                    footer_coords_xywh[box_index] = [0, 0, 0, 0]
+                    # FIXED: Remove the box entirely when no boxes are returned
+                    print("✅ Footer box removed.")
+                    footer_coords_display.pop(box_index)
+                    footer_coords_xywh.pop(box_index)
 
                 save_coords(row_id, filename, table_coords_xywh, image_coords_xywh, column_coords_xywh, header_coords_xywh, footer_coords_xywh)
 
@@ -1203,9 +1540,8 @@ def stage_3(
 
         5. **Image Placeholder Insertion:**
             * **GREEN BOXES** indicate pre-detected image regions. Your task is to place an `[image]` placeholder in the text where that image logically belongs.
-            * Place the `[image]` placeholder at the nearest paragraph break corresponding to its vertical position in the reading order.
-            * The image's caption text (e.g., "FIGURE 12. Displacement of pipeline...") must be included in the "Page text" immediately after the `[image]` placeholder, as it appears in the document.
-            * The number of `[image]` placeholders MUST match the number of green boxes.
+            * **UPDATED RULE:** If an image has a caption, always place the `[image]` placeholder **immediately before its caption text** in the reading order. 
+            * The number of `[image]` placeholders must exactly equal the number of green boxes.
 
         6. **Mathematical Content (LaTeX Formatting):**
             * **MANDATORY:** All mathematical expressions MUST be in LaTeX format.
@@ -1222,6 +1558,8 @@ def stage_3(
             * If a header spans multiple rows or columns, explicitly use rowspan or colspan (instead of leaving empty <th> tags).
             * Ensure the number of columns in the header matches the number of data columns.
             * Place the entire `<table>...</table>` string in the "Page text" where it appears in the reading order.
+            * **UPDATED RULE:** If a table spans across multiple columns, treat it as a full-width element. Place it in the reading order where it appears vertically on the page, after completing the text immediately above it.
+            * **UPDATED RULE:** The number of `<table>` extractions must exactly equal the number of red boxes.
 
         8. **Content Completeness:**
             * Extract ALL visible text content from the document - do not skip any sections.
@@ -1240,6 +1578,7 @@ def stage_3(
             * **IMPORTANT**: Figure/table sources go in "Page text", not footer, even if they appear at document bottom.
             * Document-level footers (page numbers, copyright) go in "Page footer".
             * Scan the entire image area systematically - do not ignore edge regions.
+            * **UPDATED RULE:** If an image or table appears visually between two columns, insert it **after the preceding text block of the leftmost column** at the same vertical level.
 
         **VISUAL CUES SUMMARY:**
         * **RED BOXES:** Tables - Extract table content as HTML
@@ -1263,6 +1602,8 @@ def stage_3(
           "Page text": "All body content from blue column boxes, including [image] placeholders, LaTeX math, and HTML tables, in correct reading order.",
           "Page footer": "Text from magenta footer boxes."
         }
+
+        **FINAL RULE:** Return ONLY the JSON object. Do not output any explanation, reasoning, or markdown code fences.
         """
         
     # --- 4. Initialize Model and Load Data ---
