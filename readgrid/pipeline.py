@@ -1473,7 +1473,7 @@ def stage_3(
     print(f"ℹ️  Final JSON will include: {fields_to_include}")
 
     # Determine model
-    chosen_model = model_name or "gemini-1.5-flash"
+    chosen_model = model_name or "gemini-2.0-flash"
     print(f"ℹ️  Using model: {chosen_model}")
 
     # --- 2. Configure Model API ---
