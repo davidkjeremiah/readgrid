@@ -354,35 +354,35 @@ def create_annotated_image(
     for i, box in enumerate(valid_table_boxes):
         x, y, w, h = box
         cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
-        cv2.putText(annotated_img, f"Table {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+        cv2.putText(annotated_img, f"T{i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
     # Draw image boxes (green) - only valid boxes, numbered sequentially
     valid_image_boxes = [box for box in image_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
     for i, box in enumerate(valid_image_boxes):
         x, y, w, h = box
         cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (0, 255, 0), 3)
-        cv2.putText(annotated_img, f"Image {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        cv2.putText(annotated_img, f"I{i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
     # Draw column boxes (blue) - only valid boxes, numbered sequentially
     valid_column_boxes = [box for box in column_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
     for i, box in enumerate(valid_column_boxes):
         x, y, w, h = box
         cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 0, 0), 3)
-        cv2.putText(annotated_img, f"Column {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+        cv2.putText(annotated_img, f"C{i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
 
     # Draw header boxes (cyan) - only valid boxes, numbered sequentially
     valid_header_boxes = [box for box in header_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
     for i, box in enumerate(valid_header_boxes):
         x, y, w, h = box
         cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 255, 0), 3)
-        cv2.putText(annotated_img, f"Header {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 0), 2)
+        cv2.putText(annotated_img, f"H{i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 0), 2)
 
     # Draw footer boxes (magenta) - only valid boxes, numbered sequentially
     valid_footer_boxes = [box for box in footer_boxes if box and len(box) == 4 and any(box) and box != [0,0,0,0]]
     for i, box in enumerate(valid_footer_boxes):
         x, y, w, h = box
         cv2.rectangle(annotated_img, (x, y), (x + w, y + h), (255, 0, 255), 3)
-        cv2.putText(annotated_img, f"Footer {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 255), 2)
+        cv2.putText(annotated_img, f"F{i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 255), 2)
 
     return annotated_img
 
@@ -410,7 +410,7 @@ def create_context_image(
     for i, (box, original_idx) in enumerate(valid_context_tables):
         x, y, w, h = box
         cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
-        cv2.putText(context_img, f"Table {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(context_img, f"T{i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
     # Draw context image boxes (green) - filter and renumber sequentially
     valid_context_images = [(box, original_idx) for box, original_idx in context_image_boxes 
@@ -418,7 +418,7 @@ def create_context_image(
     for i, (box, original_idx) in enumerate(valid_context_images):
         x, y, w, h = box
         cv2.rectangle(context_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv2.putText(context_img, f"Image {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(context_img, f"I{i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
     # Draw context column boxes (blue) - filter and renumber sequentially
     valid_context_columns = [(box, original_idx) for box, original_idx in context_column_boxes 
@@ -426,7 +426,7 @@ def create_context_image(
     for i, (box, original_idx) in enumerate(valid_context_columns):
         x, y, w, h = box
         cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-        cv2.putText(context_img, f"Column {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+        cv2.putText(context_img, f"C{i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
     # Draw context header boxes (cyan) - filter and renumber sequentially
     valid_context_headers = [(box, original_idx) for box, original_idx in context_header_boxes 
@@ -434,7 +434,7 @@ def create_context_image(
     for i, (box, original_idx) in enumerate(valid_context_headers):
         x, y, w, h = box
         cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 255, 0), 2)
-        cv2.putText(context_img, f"Header {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        cv2.putText(context_img, f"H{i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
     # Draw context footer boxes (magenta) - filter and renumber sequentially
     valid_context_footers = [(box, original_idx) for box, original_idx in context_footer_boxes 
@@ -442,7 +442,7 @@ def create_context_image(
     for i, (box, original_idx) in enumerate(valid_context_footers):
         x, y, w, h = box
         cv2.rectangle(context_img, (x, y), (x + w, y + h), (255, 0, 255), 2)
-        cv2.putText(context_img, f"Footer {i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+        cv2.putText(context_img, f"F{i + 1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
 
     return context_img
 
@@ -906,6 +906,9 @@ def process_single_image(filename, filepath, row_id):
                             for x, y, w, h in footer_coords_xywh]
 
     print(f"✅ Found {len(table_coords_xywh)} tables and {len(image_coords_xywh)} images.")
+
+    print("\n📋 ANNOTATION KEY:")
+    print("   T# = Table    I# = Image    C# = Column    H# = Header    F# = Footer")
 
     def get_valid_box_mapping(boxes_list):
             """Returns mapping from visual indices (1,2,3...) to actual array indices."""
@@ -1543,25 +1546,47 @@ def stage_3(
             * **UPDATED RULE:** If an image has a caption, always place the `[image]` placeholder **immediately before its caption text** in the reading order. 
             * The number of `[image]` placeholders must exactly equal the number of green boxes.
 
-        6. **Mathematical Content (LaTeX Formatting):**
+        6. **GUIDELINE ON BOX LABELS:**
+            * The abbreviated labels (e.g., "C1", "C2", "T1", "I1", "H1", "F1") are visual markers to indicate reading order and grouping.
+            * Label meanings: C#=Column, T#=Table, I#=Image, H#=Header, F#=Footer
+            * You MUST use these numbers to determine the correct sequence (for example, read C1 fully before C2).
+            * Do NOT copy these abbreviated labels themselves into the JSON output. They are not part of the original page content.
+            * Only extract the actual document text, equations, or tables found inside each box.
+
+        7. **Mathematical Content (LaTeX Formatting):**
             * **MANDATORY:** All mathematical expressions MUST be in LaTeX format.
             * Use `\[ ... \]` for display equations (equations on their own line).
             * Use `\( ... \)` for inline equations (equations within a line of text).
             * **CRITICAL FOR JSON VALIDITY:** Every backslash `\` in LaTeX commands MUST be escaped with a second backslash. This is required for the output to be valid JSON.
                 * **Correct:** `"\\(x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\\)"`
                 * **Incorrect:** `"\(x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}\)"`
+        
+        8. **Table Extraction (MANDATORY):**
+            * Every detected table (red box region or tabular text) MUST be extracted and output as clean HTML `<table>` markup.
+            * Do not output any table as plain text.
+            * Always capture the table title/label if present (e.g., "Table 1. …") and include it immediately above the `<table>` element.
+            * Always include `<thead>` for header rows and `<tbody>` for data rows. Use `<tr>`, `<th>`, `<td>` properly.
+            * Preserve multi-row/column headers with `rowspan` and `colspan` if applicable.
+            * The number of `<table>` elements in the JSON MUST equal the number of detected red boxes.
+            * Even if the table is very short or looks like two columns of examples, it still counts as a table and must be formatted as HTML.
+            * Example (using unrelated placeholder data, only to show format):
+              ```
+              Table 1. Example of fruit nutrition values.
+              <table>
+                <thead>
+                  <tr><th>Fruit</th><th>Calories</th><th>Vitamin C (%)</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Apple</td><td>95</td><td>14</td></tr>
+                  <tr><td>Orange</td><td>62</td><td>116</td></tr>
+                  <tr><td>Banana</td><td>105</td><td>17</td></tr>
+                </tbody>
+              </table>
+              ```
 
-        7. **Table Extraction (CRITICAL):**
-            * **RED BOXES** indicate pre-detected table regions. Your task is to extract the table content.
-            * Extract all tables into clean, standard HTML `<table>` format.
-            * Use `<thead>`, `<tbody>`, `<tr>`, `<th>`, and `<td>`.
-            * If a header spans multiple rows or columns, explicitly use rowspan or colspan (instead of leaving empty <th> tags).
-            * Ensure the number of columns in the header matches the number of data columns.
-            * Place the entire `<table>...</table>` string in the "Page text" where it appears in the reading order.
-            * **UPDATED RULE:** If a table spans across multiple columns, treat it as a full-width element. Place it in the reading order where it appears vertically on the page, after completing the text immediately above it.
-            * **UPDATED RULE:** The number of `<table>` extractions must exactly equal the number of red boxes.
 
-        8. **Content Completeness:**
+
+        9. **Content Completeness:**
             * Extract ALL visible text content from the document - do not skip any sections.
             * **CRITICAL**: Check all four edges of the image for text content, especially bottom margins.
             * If text appears to be cut off or incomplete, note this but extract what is visible.
@@ -1570,7 +1595,7 @@ def stage_3(
             * Source citations and references must be included even if they appear in margins.
             * Small or faded text is still important - extract all readable content.
 
-        9. **Edge Content Detection:**
+        10. **Edge Content Detection:**
             * Pay special attention to content at the very top and bottom edges of the document.
             * Source citations for figures/tables often appear at bottom margins - these go in "Page text".
             * Look for small text, italicized text, or different formatting that might indicate source material.
@@ -1581,17 +1606,20 @@ def stage_3(
             * **UPDATED RULE:** If an image or table appears visually between two columns, insert it **after the preceding text block of the leftmost column** at the same vertical level.
 
         **VISUAL CUES SUMMARY:**
-        * **RED BOXES:** Tables - Extract table content as HTML
-        * **GREEN BOXES:** Images - Place `[image]` placeholder + caption in text
-        * **BLUE BOXES:** Columns - Define reading order and column boundaries  
-        * **CYAN BOXES:** Headers - Extract header metadata
-        * **MAGENTA BOXES:** Footers - Extract footer metadata
+        * **RED BOXES (T#):** Tables - Extract table content as HTML
+        * **GREEN BOXES (I#):** Images - Place `[image]` placeholder + caption in text
+        * **BLUE BOXES (C#):** Columns - Define reading order and column boundaries  
+        * **CYAN BOXES (H#):** Headers - Extract header metadata
+        * **MAGENTA BOXES (F#):** Footers - Extract footer metadata
 
         **EXTRACTION PRIORITY:**
         1. First, identify headers (cyan boxes) and footers (magenta boxes)
         2. Then, follow column order (blue boxes) for main content
         3. Insert image placeholders (green boxes) at appropriate positions
         4. Extract tables (red boxes) in their reading order position
+
+        * FINAL REMINDER: Every single backslash must be escaped as `\\`. 
+        Example: use `\\frac{a}{b}`, not `\frac{a}{b}`.
 
         **OUTPUT FORMAT (Strictly JSON):**
         Return ONLY a valid JSON object. Do not include any introductory text, explanations, or markdown code fences like ```json.
@@ -1651,8 +1679,26 @@ def stage_3(
             gem_json_str = response.text.strip()
             if gem_json_str.startswith("```json"):
                 gem_json_str = gem_json_str[7:-3].strip()
+
+            # --- Escape fixer for stray backslashes ---
+            safe_json_str = re.sub(
+                r'(?<!\\)\\(?![\\/"bfnrtu])',   # match single \ not already escaped
+                r'\\\\',                        # replace with double \\
+                gem_json_str
+            )
+            gem_json = json.loads(safe_json_str)
+
             
-            gem_json = json.loads(gem_json_str)
+            #gem_json = json.loads(gem_json_str)
+            # try:
+            #     gem_json = json.loads(gem_json_str)
+            # except json.JSONDecodeError as e:
+            #     print("❌ JSON decode failed:", e)
+            #     print("---- Offending string around error ----")
+            #     err_pos = e.pos
+            #     print(gem_json_str[max(0, err_pos-50): err_pos+50])
+            #     raise
+
             print("✅ Extraction results ready.")
 
             # Build the final JSON dynamically based on the final list of fields
