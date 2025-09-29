@@ -21,10 +21,11 @@ from IPython.display import display, Image as IPImage, clear_output, HTML
 
 # Imports for Stage 3 (LLM)
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
 except ImportError:
-    print("Warning: 'google-generativeai' not found. Stage 3 will not be available.")
-    print("Please run: !pip install -q google-generativeai")
+    print("Warning: 'google-genai' not found. Stage 3 will not be available.")
+    print("Please run: !pip install -q google-genai")
 
 # ==================== UTILITY FUNCTIONS ====================
 def cleanup_pipeline():
@@ -1436,7 +1437,8 @@ def stage_2(
         print(f"\n🖼️  Zoomed-in View of Cropped Region:")
         cv2_imshow(cropped_region)
         print("\n✅ STAGE 2 COMPLETE")
-        
+
+
 def stage_3(
     api_key: Optional[str] = None, 
     custom_system_prompt: Optional[str] = None,
@@ -1446,14 +1448,6 @@ def stage_3(
 ):
     """
     Processes annotated images through LLM with customizable JSON output.
-
-    Args:
-        api_key: Your LLM API key. If None, you will be prompted.
-        custom_system_prompt: An optional custom prompt to override the default.
-        output_fields: A list of strings specifying which keys to INCLUDE.
-                       If None, all fields are included by default.
-        exclude_fields: A list of strings specifying which keys to EXCLUDE
-                        from the final output. This is applied after `output_fields`.
     """
     print("=" * 60)
     print("STAGE 3: LLM CONTENT EXTRACTION")
@@ -1462,35 +1456,35 @@ def stage_3(
     # --- 1. Determine Final Output Fields ---
     ALL_POSSIBLE_FIELDS = ["Page header", "Page text", "Page footer", "table_bbox", "image_bbox"]
     
-    # Start with the user-defined list or all fields
     if output_fields is not None:
         fields_to_include = [field for field in output_fields if field in ALL_POSSIBLE_FIELDS]
     else:
         fields_to_include = ALL_POSSIBLE_FIELDS.copy()
 
-    # Apply exclusions if provided
     if exclude_fields is not None:
         fields_to_include = [field for field in fields_to_include if field not in exclude_fields]
-        print(f"✅  Excluding fields: {exclude_fields}")
+        print(f"Excluding fields: {exclude_fields}")
 
-    print(f"ℹ️  Final JSON will include: {fields_to_include}")
+    print(f"Final JSON will include: {fields_to_include}")
 
     # Determine model
     chosen_model = model_name or "gemini-2.0-flash"
-    print(f"ℹ️  Using model: {chosen_model}")
+    print(f"Using model: {chosen_model}")
 
     # --- 2. Configure Model API ---
     if not api_key:
         try:
-            api_key = getpass("🔑 Please enter your Model's API Key: ")
+            api_key = getpass("Please enter your Model's API Key: ")
         except Exception as e:
             print(f"Could not read API key: {e}")
             return
-            
+
+    # Create client with new SDK
     try:
-        genai.configure(api_key=api_key)
+        client = genai.Client(api_key=api_key)
+        print("API client configured successfully")
     except Exception as e:
-        print(f"❌ Error configuring API: {e}")
+        print(f"Error configuring API: {e}")
         return
 
     # --- 3. Define System Prompt ---
@@ -1498,148 +1492,137 @@ def stage_3(
         system_prompt = custom_system_prompt
     else:
         system_prompt = r"""
-        You are a specialist in Spatial Document Intelligence. Your task is to perform Layout-Aware Content Extraction.
-        For each document page, you will analyze its structure, extract all content in the correct reading order, and format the output as a single, clean JSON object.
+You are a specialist in Spatial Document Intelligence. Your role is to perform **Layout-Aware Content Extraction** with absolute precision.  
 
-        **CRITICAL INSTRUCTIONS:**
+For every document page you process, you must:  
+1. Accurately analyze its structure.  
+2. Extract *all content* in the correct human-readable order.  
+3. Output the result as a **single, valid JSON object** in the exact schema provided.  
 
-        1. **Layout Detection & Reading Order:**
-            * Accurately identify the layout: `single_column`, `two_column`, `three_column`, or `four_column`.
-            * **CRITICAL**: If you see text arranged in distinct vertical columns side-by-side, it is a multi-column layout.
-            * **BLUE BOXES** (when present) indicate column boundaries that have been precisely marked for you.
-            * **When NO blue boxes are present**: Use visual analysis to detect columns by looking for:
-                - Vertical white space separating text blocks
-                - Consistent left/right margins creating column boundaries
-                - Text that flows top-to-bottom in separate vertical sections
-            * For multi-column layouts: Extract the ENTIRE first column (leftmost) from top to bottom, THEN the ENTIRE second column, and so on. DO NOT interleave lines between columns.
-            * **MANDATORY**: Complete each column fully before moving to the next column.
+Every rule below is **mandatory** unless explicitly marked otherwise. Do not skip, merge, or reinterpret them.
 
-        2. **Column-Aware Content Extraction:**
-            * **With blue boxes**: Use them as definitive guides for column boundaries and reading order.
-            * **Without blue boxes**: Identify column breaks by examining text alignment and vertical spacing.
-            * For 2-column layouts: Read left column completely, then right column completely.
-            * Ensure ALL visible text content is captured - do not skip any sections.
-            * Pay special attention to content that might be in the right margin or right column.
+---
 
-        3. **Header and Footer Extraction:**
-            * **ORANGE BOXES** indicate header regions that contain metadata ABOUT the document.
-            * **MAGENTA BOXES** indicate footer regions that contain document metadata.
-            * **Decision Rule:** Headers and footers contain metadata ABOUT the document, not THE content OF the document.
-            * **HEADER Content:** 
-                - Document titles/IDs
-                - Page numbers (including those in top corners like "1-25")
-                - Chapter or section identifiers
-            * **FOOTER Content:** Page numbers, footnotes, copyright notices, document-level references.
-            * **CRITICAL**: Include ALL text within header boxes, including page numbers in corners.
-            * **EXCLUDE from Header/Footer:** Section titles, figure captions, table headers, source citations for specific figures/tables.
-            * **CRITICAL**: Source citations that reference specific figures, tables, or content sections belong in "Page text", NOT in footer.
-            * Only extract text that falls within the orange (header) and magenta (footer) boxes.
-        
-        4. **Source Citation Handling:**
-            * Source citations for figures/tables (e.g., "SOURCE: I. V. S. Mullis et al., 2001, Mathematics Benchmarking Report...") belong in "Page text".
-            * Place source citations immediately after the related content (figure, table, or text section).
-            * These citations are content-specific, not document-level metadata.
-            * Only document-wide references or copyright notices go in footer.
+### 1. Reading Order (Critical Sequence Rule)
+* The definitive extraction order is:  
+  1. **Headers (H1, H2 if present)**  
+  2. **Columns (C1 → C2 → C3 → C4 …)**  
+     - Within each column, capture all text, tables, and images in correct top-to-bottom order.  
+  3. **Footers (F1, F2 if present)**  
+* **Box numbering (H1, C1, C2, T1, I1, F1, etc.) defines reading sequence.**  
+  - Always finish C1 completely before moving to C2.  
+  - Insert tables (T#) and images (I#) at their correct vertical positions inside the column where they appear.  
+  - Continue this process until all numbered boxes are exhausted.  
+* **No interleaving between columns** — each column must be read fully, top → bottom.
 
-        5. **Image Placeholder Insertion:**
-            * **GREEN BOXES** indicate pre-detected image regions. Your task is to place an `[image]` placeholder in the text where that image logically belongs.
-            * **UPDATED RULE:** If an image has a caption, always place the `[image]` placeholder **immediately before its caption text** in the reading order. 
-            * The number of `[image]` placeholders must exactly equal the number of green boxes.
+---
 
-        6. **GUIDELINE ON BOX LABELS:**
-            * The abbreviated labels (e.g., "C1", "C2", "T1", "I1", "H1", "F1") are visual markers to indicate reading order and grouping.
-            * Label meanings: C#=Column, T#=Table, I#=Image, H#=Header, F#=Footer
-            * You MUST use these numbers to determine the correct sequence (for example, read C1 fully before C2).
-            * Do NOT copy these abbreviated labels themselves into the JSON output. They are not part of the original page content.
-            * Only extract the actual document text, equations, or tables found inside each box.
+### 2. Layout Detection
+* Identify the layout type: `single_column`, `two_column`, `three_column`, or `four_column`.  
+* **CRITICAL:** If text is in distinct vertical blocks side-by-side, it is multi-column.  
+* **Blue boxes (C#):** Define column boundaries.  
+* **If no blue boxes exist:** Detect columns by:  
+  - Vertical whitespace between text blocks  
+  - Consistent margins  
+  - Continuous vertical flow of text in separate bands  
 
-        7. **Mathematical Content (LaTeX Formatting):**
-            * **MANDATORY:** All mathematical expressions MUST be in LaTeX format.
-            * Use `\[ ... \]` for display equations (equations on their own line).
-            * Use `\( ... \)` for inline equations (equations within a line of text).
-            * **CRITICAL FOR JSON VALIDITY:** Every backslash `\` in LaTeX commands MUST be escaped with a second backslash. This is required for the output to be valid JSON.
-                * **Correct:** `"\\(x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\\)"`
-                * **Incorrect:** `"\(x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}\)"`
-        
-        8. **Table Extraction (MANDATORY):**
-            * Every detected table (red box region or tabular text) MUST be extracted and output as clean HTML `<table>` markup.
-            * Do not output any table as plain text.
-            * Always capture the table title/label if present (e.g., "Table 1. …") and include it immediately above the `<table>` element.
-            * Always include `<thead>` for header rows and `<tbody>` for data rows. Use `<tr>`, `<th>`, `<td>` properly.
-            * Preserve multi-row/column headers with `rowspan` and `colspan` if applicable.
-            * The number of `<table>` elements in the JSON MUST equal the number of detected red boxes.
-            * Even if the table is very short or looks like two columns of examples, it still counts as a table and must be formatted as HTML.
-            * Example (using unrelated placeholder data, only to show format):
-              ```
-              Table 1. Example of fruit nutrition values.
-              <table>
-                <thead>
-                  <tr><th>Fruit</th><th>Calories</th><th>Vitamin C (%)</th></tr>
-                </thead>
-                <tbody>
-                  <tr><td>Apple</td><td>95</td><td>14</td></tr>
-                  <tr><td>Orange</td><td>62</td><td>116</td></tr>
-                  <tr><td>Banana</td><td>105</td><td>17</td></tr>
-                </tbody>
-              </table>
-              ```
+---
 
+### 3. Headers & Footers
+* **Cyan boxes (H#):** Headers.  
+* **Magenta boxes (F#):** Footers.  
+* Rules:  
+  - If no cyan box → `"Page header": ""`.  
+  - If no magenta box → `"Page footer": ""`.  
+* **Header content:** titles, section IDs, page numbers at top.  
+* **Footer content:** page numbers at bottom, journal citations, copyright.  
+* Do **not** mix section titles, captions, or references into header/footer.  
 
+---
 
-        9. **Content Completeness:**
-            * Extract ALL visible text content from the document - do not skip any sections.
-            * **CRITICAL**: Check all four edges of the image for text content, especially bottom margins.
-            * If text appears to be cut off or incomplete, note this but extract what is visible.
-            * Ensure tables are completely extracted with all visible rows and columns.
-            * Double-check that content from all columns has been captured.
-            * Source citations and references must be included even if they appear in margins.
-            * Small or faded text is still important - extract all readable content.
+### 4. Source Citations
+* Citations tied to **figures, tables, or specific sections** go in `"Page text"`.  
+* Only document-level references (e.g., copyright, global citations) go in `"Page footer"`.  
+* Place figure/table citations immediately after the related figure/table.
 
-        10. **Edge Content Detection:**
-            * Pay special attention to content at the very top and bottom edges of the document.
-            * Source citations for figures/tables often appear at bottom margins - these go in "Page text".
-            * Look for small text, italicized text, or different formatting that might indicate source material.
-            * Common patterns: "SOURCE:", "Note:", author citations, publication references.
-            * **IMPORTANT**: Figure/table sources go in "Page text", not footer, even if they appear at document bottom.
-            * Document-level footers (page numbers, copyright) go in "Page footer".
-            * Scan the entire image area systematically - do not ignore edge regions.
-            * **UPDATED RULE:** If an image or table appears visually between two columns, insert it **after the preceding text block of the leftmost column** at the same vertical level.
+---
 
-        **VISUAL CUES SUMMARY:**
-        * **RED BOXES (T#):** Tables - Extract table content as HTML
-        * **GREEN BOXES (I#):** Images - Place `[image]` placeholder + caption in text
-        * **BLUE BOXES (C#):** Columns - Define reading order and column boundaries  
-        * **CYAN BOXES (H#):** Headers - Extract header metadata
-        * **MAGENTA BOXES (F#):** Footers - Extract footer metadata
+### 5. Images
+* **Green boxes (I#):** Image regions.  
+* Insert `[image]` placeholder in `"Page text"` where the image belongs.  
+* If image has caption → place `[image]` immediately **before** its caption.  
+* Number of `[image]` placeholders must equal number of green boxes.  
 
-        **EXTRACTION PRIORITY:**
-        1. First, identify headers (cyan boxes) and footers (magenta boxes)
-        2. Then, follow column order (blue boxes) for main content
-        3. Insert image placeholders (green boxes) at appropriate positions
-        4. Extract tables (red boxes) in their reading order position
+---
 
-        * FINAL REMINDER: Every single backslash must be escaped as `\\`. 
-        Example: use `\\frac{a}{b}`, not `\frac{a}{b}`.
+### 6. Tables
+* **Red boxes (T#):** Table regions.  
+* Must be extracted as valid HTML `<table>`.  
+* Include table titles (e.g., "Table 1. …") directly above `<table>`.  
+* Structure:  
+  - `<thead>` for header rows  
+  - `<tbody>` for data rows  
+  - Preserve merged cells with `rowspan`/`colspan`  
+* Number of `<table>` elements must equal red boxes.  
+* Even short columnar lists count as tables.
 
-        **OUTPUT FORMAT (Strictly JSON):**
-        Return ONLY a valid JSON object. Do not include any introductory text, explanations, or markdown code fences like ```json.
+---
 
-        {
-          "layout_type": "single_column | two_column | three_column | four_column",
-          "Page header": "Text from cyan header boxes.",
-          "Page text": "All body content from blue column boxes, including [image] placeholders, LaTeX math, and HTML tables, in correct reading order.",
-          "Page footer": "Text from magenta footer boxes."
-        }
+### 7. Mathematical Content
+* All math must be in **LaTeX format**.  
+* Use `\\[ ... \\]` for block equations, `\\( ... \\)` for inline.  
+* Escape every backslash (`\` → `\\`) for JSON safety.  
+  - Correct: `"\\(x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\\)"`  
 
-        **FINAL RULE:** Return ONLY the JSON object. Do not output any explanation, reasoning, or markdown code fences.
-        """
-        
-    # --- 4. Initialize Model and Load Data ---
-    model = genai.GenerativeModel(
-        model_name=chosen_model,
-        system_instruction=system_prompt
-    )
-    
+---
+
+### 8. Content Completeness
+* Extract **all visible text**, even faint, marginal, or small notes.  
+* Check all page edges (top, bottom, left, right).  
+* If truncated, extract what is visible.  
+* Do not omit references, footnotes, or small annotations.
+
+---
+
+### 9. Edge Content Rules
+* Figure/table sources at bottom margins → `"Page text"`.  
+* Document-wide metadata → `"Page footer"`.  
+* If an image or table appears between two columns, insert it **after the previous text block of the leftmost column** at that vertical level.  
+
+---
+
+### 10. Visual Cues Summary
+* **H# (Cyan):** Headers → `"Page header"`.  
+* **C# (Blue):** Columns → `"Page text"` in order (C1 → C2 → C3 → …).  
+* **T# (Red):** Tables → HTML `<table>`, inserted inline in `"Page text"`.  
+* **I# (Green):** Images → `[image]` placeholders, inserted inline in `"Page text"`.  
+* **F# (Magenta):** Footers → `"Page footer"`.  
+
+---
+
+### 11. Extraction Priority
+1. Headers (H#)  
+2. Columns (C1 → Cn, with inline T# and I#)  
+3. Footers (F#)  
+
+---
+
+### 12. JSON Output Requirements
+* **Return ONLY JSON.** No explanations, no markdown fences.  
+
+```
+{
+  "layout_type": "single_column | two_column | three_column | four_column",
+  "Page header": "Extracted text from H# boxes (or empty string).",
+  "Page text": "Extracted body text from C# boxes, including [image] placeholders, LaTeX equations, and HTML tables, in correct reading order.",
+  "Page footer": "Extracted text from F# boxes (or empty string)."
+}
+
+```
+* **Final Rule:** JSON must be valid. Escape every LaTeX backslash.  
+
+"""
+    # --- 4. Load Data ---
     coords_path = 'coords.json'
     bounded_images_dir = 'bounded_images'
     final_outputs_dir = 'final_outputs'
@@ -1649,16 +1632,16 @@ def stage_3(
         with open(coords_path, 'r') as f:
             all_coords = json.load(f)
     except FileNotFoundError:
-        print(f"❌ Error: '{coords_path}' not found. Please run stage_1() first.")
+        print(f"Error: '{coords_path}' not found. Please run stage_1() first.")
         return
 
     bounded_images = sorted([f for f in os.listdir(bounded_images_dir) if f.endswith('.jpg')])
     if not bounded_images:
-        print(f"❌ Error: No images found in '{bounded_images_dir}/'. Please run stage_1() first.")
+        print(f"Error: No images found in '{bounded_images_dir}/'. Please run stage_1() first.")
         return
 
     # --- 5. Main Processing Loop ---
-    print(f"\n📚 Found {len(bounded_images)} annotated image(s) to process.")
+    print(f"\nFound {len(bounded_images)} annotated image(s) to process.")
     not_approved_finals = []
 
     for img_file in bounded_images:
@@ -1666,30 +1649,50 @@ def stage_3(
         print("\n" + "=" * 50 + f"\nProcessing: {img_file}\n" + "=" * 50)
 
         if row_id not in all_coords:
-            print(f"⚠️ Warning: No coordinates found for '{row_id}'. Skipping.")
+            print(f"Warning: No coordinates found for '{row_id}'. Skipping.")
             continue
 
         try:
             img_path = os.path.join(bounded_images_dir, img_file)
-            image_part = {"mime_type": "image/jpeg", "data": open(img_path, 'rb').read()}
             
-            print("✨ Extracting content…")
-            response = model.generate_content([image_part])
+            # Load image and convert to PIL
+            bounded_img = Image.open(img_path)
+            
+            # Convert to bytes
+            img_bytes = BytesIO()
+            bounded_img.save(img_bytes, format='JPEG')
+            img_bytes.seek(0)
+            
+            print("✨ Extracting content...")
+            response = client.models.generate_content(
+                model=chosen_model,
+                contents=[
+                    system_prompt,
+                    types.Part.from_bytes(
+                        data=img_bytes.read(),
+                        mime_type='image/jpeg'
+                    )
+                ]
+            )
             
             gem_json_str = response.text.strip()
+            
+            # Clean markdown fences
             if gem_json_str.startswith("```json"):
-                gem_json_str = gem_json_str[7:-3].strip()
+                gem_json_str = gem_json_str[7:]
+            if gem_json_str.endswith("```"):
+                gem_json_str = gem_json_str[:-3]
+            gem_json_str = gem_json_str.strip()
 
-            # --- Escape fixer for stray backslashes ---
+            # Fix stray backslashes
             safe_json_str = re.sub(
-                r'(?<!\\)\\(?![\\/"bfnrtu])',   # match single \ not already escaped
-                r'\\\\',                        # replace with double \\
+                r'(?<!\\)\\(?![\\/"bfnrtu])',
+                r'\\\\',
                 gem_json_str
             )
+            
             gem_json = json.loads(safe_json_str)
 
-            
-            #gem_json = json.loads(gem_json_str)
             # try:
             #     gem_json = json.loads(gem_json_str)
             # except json.JSONDecodeError as e:
@@ -1715,28 +1718,30 @@ def stage_3(
                 elif field == "image_bbox":
                     final_json["image_bbox"] = all_coords[row_id].get("images", [])
             
-            print("\n📋 Final JSON for Approval:")
+            print("\nFinal JSON for Approval:")
             print("-" * 40)
             print(json.dumps(final_json, indent=2))
             print("-" * 40)
 
-            approval = input("❓ Approve this output? (Enter=Yes, n=No): ").strip().lower()
+            approval = input("Approve this output? (Enter=Yes, n=No): ").strip().lower()
             if approval == 'n':
                 not_approved_finals.append(img_file)
-                print("❌ Marked as not approved. Continuing...")
+                print("Marked as not approved. Continuing...")
             else:
                 output_path = os.path.join(final_outputs_dir, f"{row_id}.json")
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(final_json, f, indent=4, ensure_ascii=False)
-                print(f"✅ Approved and saved to: {output_path}")
+                print(f"Approved and saved to: {output_path}")
 
         except Exception as e:
-            print(f"❌ An error occurred while processing {img_file}: {e}")
+            print(f"An error occurred while processing {img_file}: {e}")
+            import traceback
+            traceback.print_exc()
             not_approved_finals.append(img_file)
             continue
             
     # --- 6. Final Summary ---
-    print("\n" + "=" * 60 + "\n✅ STAGE 3 COMPLETE")
+    print("\n" + "=" * 60 + "\nSTAGE 3 COMPLETE")
     print(f"Total images processed: {len(bounded_images)}")
     approved_count = len(bounded_images) - len(not_approved_finals)
     print(f"  - Approved and saved: {approved_count}")
