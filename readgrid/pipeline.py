@@ -286,7 +286,6 @@ def show_comparison_view(json_path: str, mode: str = "ir", uploads_dir: str = 'u
     """
     display(HTML(full_html))
 
-
 # ==================== HELPER & EDITOR FUNCTIONS ====================
 
 def xywh_to_yminmax(box: tuple) -> List[int]:
@@ -771,6 +770,480 @@ def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_t
     else:
         print("⚠️ No response received. Using original box(es)." if initial_boxes else "⚠️ No response received. No boxes will be saved.")
         return initial_boxes if initial_boxes else []
+
+def clean_table_html(html: str) -> str:
+    """Remove forbidden attributes/tags and flatten table newlines."""
+    if not html:
+        return html
+    
+    # Remove disallowed attributes
+    html = re.sub(r'\s(?:class|id|style|border|cellspacing|cellpadding)="[^"]*"', '', html, flags=re.IGNORECASE)
+    
+    # Remove forbidden tags but keep their inner content
+    forbidden_tags = ['caption', 'p', 'em', 'strong', 'span', 'div']
+    for tag in forbidden_tags:
+        html = re.sub(fr'</?{tag}.*?>', '', html, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Remove newlines inside <table>…</table>
+    def strip_table_newlines(match):
+        content = match.group(0)
+        return re.sub(r'\s*\n\s*', '', content)
+    html = re.sub(r'<table.*?>.*?</table>', strip_table_newlines, html, flags=re.DOTALL | re.IGNORECASE)
+    
+    return html
+
+def fix_broken_words(text: str) -> str:
+    """Fix broken words like 'Ac-\\ncordingly' -> 'Accordingly\\n'."""
+    if not text:
+        return text
+    
+    def replacer(match):
+        part1, part2 = match.group(1), match.group(2)
+        return part1 + part2 + "\n"
+    
+    return re.sub(r'(\w+)-\n(\w+)', replacer, text)
+
+def clean_latex(text: str) -> str:
+    r"""Normalize LaTeX inline/display delimiters and strip \left \right."""
+    if not text:
+        return text
+
+    # Normalize display math: $$...$$ → \[...\]
+    text = re.sub(r'\$\$(.*?)\$\$', r'\\[\1\\]', text, flags=re.DOTALL)
+
+    # Normalize inline math: $...$ → \(...\)
+    # BUT: avoid matching currency (dollar signs followed/preceded by digits/commas)
+    # This regex requires at least one non-digit, non-comma character inside
+    # OR math symbols like =, +, -, *, /, ^, _, \, {, }
+    def is_likely_math(content):
+        """Check if content between $ signs is likely LaTeX math, not currency."""
+        # If it contains LaTeX-specific characters, it's math
+        math_indicators = ['\\', '{', '}', '^', '_', '=', r'\frac', r'\sum', r'\int']
+        if any(indicator in content for indicator in math_indicators):
+            return True
+        # If it's only digits, commas, periods, and spaces, it's likely currency
+        if re.match(r'^[\d,.\s]+$', content):
+            return False
+        # If it contains letters (variable names), it's likely math
+        if re.search(r'[a-zA-Z]', content):
+            return True
+        return False
+    
+    # Find all $...$ patterns and only convert if they're likely math
+    def replace_inline_math(match):
+        content = match.group(1)
+        if is_likely_math(content):
+            return f'\\({content}\\)'
+        else:
+            return match.group(0)  # Keep original $...$
+    
+    text = re.sub(r'\$(.*?)\$', replace_inline_math, text)
+
+    # Remove \left and \right safely
+    text = re.sub(r'\\left', '', text)
+    text = re.sub(r'\\right', '', text)
+
+    return text
+
+def clean_json_fields(data: dict) -> dict:
+    """Apply all cleaning functions to JSON text fields."""
+    cleaned = data.copy()
+    for key in ["Page header", "Page text", "Page footer"]:
+        if key in cleaned and isinstance(cleaned[key], str):
+            cleaned[key] = clean_table_html(cleaned[key])
+            cleaned[key] = fix_broken_words(cleaned[key])
+            cleaned[key] = clean_latex(cleaned[key])
+    return cleaned
+
+
+def editor(
+    row_id: str,
+    api_key: Optional[str] = None,
+    model: str = "gemini-2.0-flash",
+    file_type: str = "json",
+    clean: bool = True,
+    font_size: int = 12,
+    uploads_dir: str = 'uploads',
+    coords_file: str = 'coords.json',
+    final_outputs_dir: str = 'final_outputs'
+):
+    """
+    Interactive JSON editor with LLM assistance for correcting document extraction errors.
+    
+    Args:
+        row_id: The document ID to edit
+        api_key: Gemini API key (will prompt if not provided)
+        model: Gemini model name (default: gemini-2.0-flash)
+        file_type: Type of file to edit (default: "json")
+        clean: Whether to apply automatic cleaning first (default: True)
+        font_size: Font size for JSON display (default: 12)
+        uploads_dir: Directory containing original images
+        coords_file: Path to coords.json file
+        final_outputs_dir: Directory containing final JSON outputs
+    """
+    import ipywidgets as widgets
+    import difflib
+    
+    print("=" * 60)
+    print(f"JSON EDITOR: {row_id}")
+    print("=" * 60)
+    
+    # --- 1. Validate inputs ---
+    if file_type != "json":
+        print(f"Warning: Only 'json' file type is currently supported. Got '{file_type}'.")
+        return
+    
+    json_path = os.path.join(final_outputs_dir, f"{row_id}.json")
+    if not os.path.exists(json_path):
+        print(f"Error: JSON file not found at '{json_path}'")
+        return
+    
+    if not os.path.exists(coords_file):
+        print(f"Error: Coords file not found at '{coords_file}'")
+        return
+    
+    # --- 2. Load JSON and get original image path ---
+    with open(json_path, 'r', encoding='utf-8') as f:
+        json_data = json.load(f)
+    
+    with open(coords_file, 'r') as f:
+        all_coords = json.load(f)
+    
+    if row_id not in all_coords:
+        print(f"Error: Row ID '{row_id}' not found in coords.json")
+        return
+    
+    original_filename = all_coords[row_id].get("original_filename")
+    if not original_filename:
+        print(f"Error: 'original_filename' not found for '{row_id}'")
+        return
+    
+    image_path = os.path.join(uploads_dir, original_filename)
+    if not os.path.exists(image_path):
+        print(f"Error: Original image not found at '{image_path}'")
+        return
+    
+    # --- 3. Apply cleaning if requested ---
+    if clean:
+        print("Cleaning JSON...")
+        json_data = clean_json_fields(json_data)
+        print("Cleaning complete")
+    
+    # --- 4. Configure API ---
+    if not api_key:
+        try:
+            api_key = getpass("Please enter your Gemini API Key: ")
+        except Exception as e:
+            print(f"Could not read API key: {e}")
+            return
+    
+    try:
+        client = genai.Client(api_key=api_key)
+        print("API client configured successfully")
+    except Exception as e:
+        print(f"Error configuring API: {e}")
+        return
+    
+    # --- 5. Initialize editor state ---
+    original_json = json_data.copy()
+    current_json = json_data.copy()
+    history = [json_data.copy()]
+    conversation_history = []
+    
+    # Load image
+    with open(image_path, 'rb') as f:
+        image_bytes = f.read()
+    
+    # System prompt
+    SYSTEM_PROMPT = """You are a JSON editor that corrects document extraction errors by comparing JSON data with the original document image.
+
+Your task:
+1. Analyze the provided document image
+2. Compare it with the JSON representation
+3. Follow user instructions to make corrections
+4. Return ONLY the corrected JSON object with the same structure
+
+Common tasks:
+- Add or remove newline characters (\\n)
+- Fix text that should be on separate lines
+- Correct spacing between words
+- Move text to correct fields (header/footer/text)
+
+Return format: Valid JSON object with the same keys, only modified values where corrections are needed."""
+    
+    # --- 6. Helper functions ---
+    def show_initial_view(json_data, image_path):
+        """Display initial view with image on left and JSON on right"""
+        json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
+        
+        left_output = widgets.Output(layout=widgets.Layout(width='50%', padding='10px'))
+        right_output = widgets.Output(layout=widgets.Layout(width='50%', padding='10px'))
+        
+        # Left side - Image
+        with left_output:
+            print("Original Document")
+            print("-" * 40)
+            if image_path and os.path.exists(image_path):
+                display(IPImage(filename=image_path))
+            else:
+                print("No image available")
+        
+        # Right side - JSON
+        with right_output:
+            print("Current JSON")
+            print("-" * 40)
+            html = [f'<div style="font-family: monospace; font-size: {font_size}px; white-space: pre-wrap; word-wrap: break-word; color: #000; max-height: 600px; overflow-y: auto;">']
+            for line in json_str.splitlines():
+                html.append(f'<div>{line}</div>')
+            html.append('</div>')
+            display(HTML(''.join(html)))
+        
+        display(widgets.HBox([left_output, right_output], layout=widgets.Layout(width='100%')))
+    
+    def generate_unified_diff(original, corrected):
+        """Generate unified diff"""
+        original_str = json.dumps(original, indent=2, ensure_ascii=False)
+        corrected_str = json.dumps(corrected, indent=2, ensure_ascii=False)
+        
+        diff = list(difflib.unified_diff(
+            original_str.splitlines(keepends=True),
+            corrected_str.splitlines(keepends=True),
+            fromfile='before',
+            tofile='after',
+            lineterm=''
+        ))
+        
+        return ''.join(diff)
+    
+    def show_compact_diff(diff_text):
+        """Display unified diff with color coding"""
+        html_lines = [f'<div style="font-family: monospace; font-size: {font_size}px; white-space: pre-wrap; word-wrap: break-word; max-width: 100%; overflow-wrap: break-word;">']
+        
+        for line in diff_text.split('\n'):
+            if line.startswith('+++') or line.startswith('---'):
+                html_lines.append(f'<span style="color: #666; font-weight: bold;">{line}</span>')
+            elif line.startswith('@@'):
+                html_lines.append(f'<span style="color: #0969da; font-weight: bold;">{line}</span>')
+            elif line.startswith('+'):
+                html_lines.append(f'<span style="background-color: #d1f0d1; color: #0a6e0a;">{line}</span>')
+            elif line.startswith('-'):
+                html_lines.append(f'<span style="background-color: #ffd7d5; color: #d1242f;">{line}</span>')
+            else:
+                html_lines.append(f'<span style="color: #333;">{line}</span>')
+        
+        html_lines.append('</div>')
+        display(HTML('\n'.join(html_lines)))
+    
+    def show_side_by_side_diff(original, corrected):
+        """Display side-by-side diff with color coding"""
+        original_str = json.dumps(original, indent=2, ensure_ascii=False)
+        corrected_str = json.dumps(corrected, indent=2, ensure_ascii=False)
+        
+        original_lines = original_str.splitlines()
+        corrected_lines = corrected_str.splitlines()
+        
+        matcher = difflib.SequenceMatcher(None, original_lines, corrected_lines)
+        
+        html = [f'<div style="display: flex; gap: 10px; font-family: monospace; font-size: {font_size}px; max-width: 100%;">']
+        
+        # Left side (Original - Red)
+        html.append('<div style="flex: 1; border: 1px solid #ddd; padding: 10px; background-color: #fff; overflow-x: auto;">')
+        html.append('<div style="font-weight: bold; margin-bottom: 10px; color: #d1242f;">Original (Before)</div>')
+        html.append('<div style="white-space: pre-wrap; word-wrap: break-word;">')
+        
+        # Right side (Corrected - Green)
+        right_html = ['<div style="flex: 1; border: 1px solid #ddd; padding: 10px; background-color: #fff; overflow-x: auto;">']
+        right_html.append('<div style="font-weight: bold; margin-bottom: 10px; color: #0a6e0a;">Corrected (After)</div>')
+        right_html.append('<div style="white-space: pre-wrap; word-wrap: break-word;">')
+        
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == 'equal':
+                for line in original_lines[i1:i2]:
+                    html.append(f'<div style="color: #333;">{line}</div>')
+                for line in corrected_lines[j1:j2]:
+                    right_html.append(f'<div style="color: #333;">{line}</div>')
+            elif tag == 'delete':
+                for line in original_lines[i1:i2]:
+                    html.append(f'<div style="background-color: #ffd7d5; color: #d1242f;">- {line}</div>')
+            elif tag == 'insert':
+                for line in corrected_lines[j1:j2]:
+                    right_html.append(f'<div style="background-color: #d1f0d1; color: #0a6e0a;">+ {line}</div>')
+            elif tag == 'replace':
+                for line in original_lines[i1:i2]:
+                    html.append(f'<div style="background-color: #ffd7d5; color: #d1242f;">- {line}</div>')
+                for line in corrected_lines[j1:j2]:
+                    right_html.append(f'<div style="background-color: #d1f0d1; color: #0a6e0a;">+ {line}</div>')
+        
+        html.append('</div></div>')
+        right_html.append('</div></div>')
+        html.append(''.join(right_html))
+        html.append('</div>')
+        
+        display(HTML(''.join(html)))
+    
+    # --- 7. Create UI widgets ---
+    instruction_input = widgets.Textarea(
+        value='Compare the JSON with the document image and correct any formatting errors.',
+        placeholder='Type your instruction here...',
+        description='',
+        layout=widgets.Layout(width='100%', height='80px')
+    )
+    
+    send_button = widgets.Button(description="Send", button_style="primary")
+    undo_button = widgets.Button(description="Undo", button_style="warning")
+    reset_button = widgets.Button(description="Reset", button_style="danger")
+    save_button = widgets.Button(description="Save", button_style="success")
+    
+    include_image_checkbox = widgets.Checkbox(
+        value=True,
+        description='Include image in request',
+        indent=False
+    )
+    
+    diff_style_dropdown = widgets.Dropdown(
+        options=[('Unified', 'unified'), ('Side-by-Side', 'side-by-side')],
+        value='unified',
+        description='Diff view:',
+        style={'description_width': 'auto'}
+    )
+    
+    output_area = widgets.Output()
+    
+    # --- 8. Button handlers ---
+    def on_send(b):
+        nonlocal current_json, history, conversation_history
+        
+        with output_area:
+            clear_output(wait=True)
+            instruction = instruction_input.value.strip()
+            
+            if not instruction:
+                print("Please enter an instruction")
+                return
+            
+            print(f"You: {instruction}")
+            print("\nProcessing...\n")
+            
+            previous_json = current_json.copy()
+            
+            try:
+                prompt = f"""Current JSON:
+{json.dumps(current_json, indent=2, ensure_ascii=False)}
+
+User request: {instruction}
+
+Return the corrected JSON object."""
+                
+                parts = [SYSTEM_PROMPT + "\n\n" + prompt]
+                
+                if include_image_checkbox.value:
+                    parts.append(
+                        types.Part.from_bytes(
+                            data=image_bytes,
+                            mime_type='image/jpeg'
+                        )
+                    )
+                
+                response = client.models.generate_content(
+                    model=model,
+                    contents=parts
+                )
+                
+                response_text = response.text.strip()
+                
+                # Clean markdown fences
+                if response_text.startswith("```json"):
+                    response_text = response_text[7:]
+                if response_text.startswith("```"):
+                    response_text = response_text[3:]
+                if response_text.endswith("```"):
+                    response_text = response_text[:-3]
+                response_text = response_text.strip()
+                
+                corrected_json = json.loads(response_text)
+                
+                if previous_json != corrected_json:
+                    print("Changes made:\n")
+                    
+                    if diff_style_dropdown.value == 'side-by-side':
+                        show_side_by_side_diff(previous_json, corrected_json)
+                    else:
+                        diff = generate_unified_diff(previous_json, corrected_json)
+                        show_compact_diff(diff)
+                    
+                    current_json = corrected_json
+                    history.append(corrected_json.copy())
+                    conversation_history.append({
+                        'instruction': instruction,
+                        'response': response_text
+                    })
+                else:
+                    print("No changes needed or no changes detected")
+                
+                print("\n" + "="*60)
+                
+            except json.JSONDecodeError as e:
+                print(f"Could not parse LLM response as JSON: {e}")
+            except Exception as e:
+                print(f"Error during LLM request: {e}")
+    
+    def on_undo(b):
+        nonlocal current_json, history
+        
+        with output_area:
+            clear_output(wait=True)
+            if len(history) > 1:
+                history.pop()
+                current_json = history[-1].copy()
+                print("Undone last change")
+                print("\nCurrent state:")
+                print(json.dumps(current_json, indent=2, ensure_ascii=False)[:500] + "...")
+            else:
+                print("Nothing to undo")
+    
+    def on_reset(b):
+        nonlocal current_json, history, conversation_history
+        
+        with output_area:
+            clear_output(wait=True)
+            current_json = original_json.copy()
+            history = [original_json.copy()]
+            conversation_history = []
+            print("Reset to original JSON")
+    
+    def on_save(b):
+        with output_area:
+            clear_output(wait=True)
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(current_json, f, indent=4, ensure_ascii=False)
+            print(f"Saved to '{json_path}'")
+    
+    send_button.on_click(on_send)
+    undo_button.on_click(on_undo)
+    reset_button.on_click(on_reset)
+    save_button.on_click(on_save)
+    
+    # --- 9. Display UI ---
+    print("\nJSON EDITOR WITH CONVERSATIONAL INTERFACE")
+    print("="*60)
+    print("\nType instructions naturally, like:")
+    print("  - 'Add a newline after the phrase \"See table 13\"'")
+    print("  - 'Remove the newline in the header'")
+    print("  - 'Fix the Page footer'")
+    print("  - 'Compare with image and fix all errors'")
+    print("\n" + "="*60 + "\n")
+    
+    display(widgets.VBox([
+        widgets.Label("Your instruction:"),
+        instruction_input,
+        widgets.HBox([send_button, undo_button, reset_button, save_button]),
+        widgets.HBox([include_image_checkbox, diff_style_dropdown]),
+        output_area
+    ]))
+    
+    # Show initial view
+    with output_area:
+        show_initial_view(current_json, image_path)
 
 # ==================== STAGE 1: UPLOAD, DETECT, & EDIT ====================
 

@@ -30,6 +30,7 @@ It lets you upload scanned documents, automatically detect tables and images, ma
   - `pretty_print_page_with_image()` – inspect extracted results with annotated images.
   - `show_comparison_view()` – compare annotated vs. reconstructed content with multiple view modes.
   - `cleanup_pipeline()` – reset all artifacts.
+  - `editor()` – interactive JSON correction with LLM assistance and diff visualization.
 
 ---
 
@@ -69,6 +70,35 @@ from readgrid import stage_3
 
 stage_3(api_key="YOUR_API_KEY")
 ```
+
+---
+## ✏️ Editor
+
+```python
+from readgrid import editor
+
+# Basic usage - will prompt for API key
+editor(row_id="ID_1")
+
+# With all options
+editor(
+    row_id="ID_1",
+    api_key="YOUR_API_KEY",
+    model="gemini-2.0-flash",
+    clean=True,        # Auto-clean tables, LaTeX, newlines
+    font_size=12       # Adjust display size
+)
+```
+
+### Features:
+
+* Currently supports just JSON file types.
+* Automatic cleaning of tables, LaTeX formatting, and broken words
+* Side-by-side view: original image vs. current JSON
+* Conversational interface: "Add newline after Table 1" or "Fix the header"
+* Real-time diff view (unified or side-by-side with color coding)
+* Undo/reset functionality
+* Saves corrections back to `final_outputs/`
 
 ---
 
