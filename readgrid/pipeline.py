@@ -18,6 +18,7 @@ from google.colab import files
 from google.colab.patches import cv2_imshow
 from google.colab import output
 from IPython.display import display, Image as IPImage, clear_output, HTML
+import ipywidgets as widgets
 
 # Imports for Stage 3 (LLM)
 try:

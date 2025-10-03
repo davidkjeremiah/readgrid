@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="readgrid",
-    version="0.1.8",
+    version="0.1.9",
     author="David Jeremiah",
     author_email="flasconnect@gmail.com",
     description="A document layout pipeline for detecting tables, images, and structured extraction.",
@@ -15,6 +15,7 @@ setup(
         "numpy",
         "Pillow",
         "google-generativeai",
+        "ipywidgets",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
