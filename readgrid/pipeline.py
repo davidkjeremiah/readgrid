@@ -214,18 +214,26 @@ def show_comparison_view(json_path: str, mode: str = "ir", uploads_dir: str = 'u
         </script>
         <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
         """
-
+    
     full_html = f"""
     <html><head>{mathjax_scripts}<style>
-        .container {{ display: flex; gap: 20px; font-family: 'Times New Roman', 'Times', serif; }}
+        .container {{ 
+            display: flex; 
+            gap: 20px; 
+            font-family: 'Times New Roman', 'Times', serif; 
+            height: 800px; 
+        }}
         
         .panel {{ 
             flex: 1; 
             border: 1px solid #ddd; 
             padding: 15px; 
             border-radius: 8px; 
-            overflow-x: auto; 
-            background-color: #fdfdfd; 
+            background-color: #fdfdfd;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
         }}
         
         .panel-title {{
@@ -240,6 +248,31 @@ def show_comparison_view(json_path: str, mode: str = "ir", uploads_dir: str = 'u
             border-radius: 8px;
             padding: 15px;
             background: #fff;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }}
+        
+        /* Visible scrollbar styling */
+        .inner-card::-webkit-scrollbar,
+        .panel::-webkit-scrollbar {{
+            width: 14px;
+            height: 14px;
+        }}
+        .inner-card::-webkit-scrollbar-track,
+        .panel::-webkit-scrollbar-track {{
+            background: #f0f0f0;
+            border-radius: 10px;
+        }}
+        .inner-card::-webkit-scrollbar-thumb,
+        .panel::-webkit-scrollbar-thumb {{
+            background: #888;
+            border-radius: 10px;
+            border: 3px solid #f0f0f0;
+        }}
+        .inner-card::-webkit-scrollbar-thumb:hover,
+        .panel::-webkit-scrollbar-thumb:hover {{
+            background: #555;
         }}
         
         .document-container {{ margin: 0; padding: 0; }}
@@ -1007,15 +1040,17 @@ Return format: Complete JSON object with the same structure, wrapped in ```json`
         rendered_content = ''.join(rendered_parts)
         
         html = f'''
-        <div style="display:flex; gap:10px; align-items:flex-start;">
-            <div style="flex:1; border:1px solid #ccc; padding:10px; border-radius:5px;">
+        <div style="display:flex; gap:10px; align-items:flex-start; height:800px;">
+            <div style="flex:1; border:1px solid #ccc; padding:10px; border-radius:5px; overflow-y:auto;">
                 <h4 style="text-align:center; margin-top:0;">Original Document</h4>
                 <img src="data:image/jpeg;base64,{img_b64}" style="width:100%; height:auto; border:1px solid #ddd;">
             </div>
-            <div style="flex:1; border:1px solid #ccc; padding:10px; border-radius:5px; max-height:800px; overflow-y:auto;">
-                <h4 style="text-align:center; margin-top:0;">Rendered Content</h4>
-                <div style="font-family: Georgia, serif; line-height:1.6;">
-                    {rendered_content}
+            <div style="flex:1; border:1px solid #ccc; border-radius:5px; display:flex; flex-direction:column; height:100%;">
+                <h4 style="text-align:center; margin:10px; flex-shrink:0;">Rendered Document Preview</h4>
+                <div style="flex:1; overflow-y:auto; padding:10px; min-height:0;">
+                    <div style="font-family: Georgia, serif; line-height:1.6;">
+                        {rendered_content}
+                    </div>
                 </div>
             </div>
         </div>
@@ -1049,6 +1084,30 @@ Return format: Complete JSON object with the same structure, wrapped in ```json`
                 border-radius: 6px;
                 background: #fafafa;
             }}
+            
+            /* Visible scrollbar styling */
+            div::-webkit-scrollbar {{
+                width: 14px;
+                height: 14px;
+            }}
+            div::-webkit-scrollbar-track {{
+                background: #f0f0f0;
+                border-radius: 10px;
+            }}
+            div::-webkit-scrollbar-thumb {{
+                background: #888;
+                border-radius: 10px;
+                border: 3px solid #f0f0f0;
+            }}
+            div::-webkit-scrollbar-thumb:hover {{
+                background: #555;
+            }}
+            
+            /* Firefox scrollbar */
+            * {{
+                scrollbar-width: thin;
+                scrollbar-color: #888 #f0f0f0;
+            }}
         </style>
         '''
         display(HTML(html))
@@ -1061,11 +1120,11 @@ Return format: Complete JSON object with the same structure, wrapped in ```json`
         
         json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
         
-        # Create the JSON editor textarea
+        # Create the JSON editor textarea with consistent height
         if validation_state['json_editor'] is None:
             validation_state['json_editor'] = widgets.Textarea(
                 value=json_str,
-                layout=widgets.Layout(width='100%', height='600px'),
+                layout=widgets.Layout(width='100%', height='730px'),  # Match container height
                 description='',
                 disabled=False
             )
@@ -1074,16 +1133,42 @@ Return format: Complete JSON object with the same structure, wrapped in ```json`
             validation_state['json_editor'].value = json_str
         
         html = f'''
-        <div style="display:flex; gap:10px; margin-bottom:10px;">
-            <div style="flex:1; border:1px solid #ccc; padding:10px; border-radius:5px; max-height:650px; overflow-y:auto;">
+        <div style="display:flex; gap:10px; margin-bottom:10px; height:800px;">
+            <div style="flex:1; border:1px solid #ccc; padding:10px; border-radius:5px; overflow-y:auto; height:100%;">
                 <h4 style="margin-top:0;">Original Document</h4>
                 <img src="data:image/jpeg;base64,{img_b64}" style="width:100%; height:auto; border:1px solid #ddd;">
             </div>
-            <div style="flex:1;">
-                <h4 style="color:#333; margin-top:0;">Raw JSON Editor</h4>
-                <p style="color:#666; font-size:0.9em;">Edit JSON manually, then click "Validate JSON" before saving.</p>
+            <div style="flex:1; display:flex; flex-direction:column; height:100%;">
+                <div style="flex-shrink:0;">
+                    <h4 style="color:#333; margin-top:0;">Raw JSON Editor</h4>
+                    <p style="color:#666; font-size:0.9em; margin-bottom:10px;">Edit JSON manually, then click "Validate JSON" before saving.</p>
+                </div>
             </div>
         </div>
+        <style>
+            /* Visible scrollbar styling */
+            div::-webkit-scrollbar {
+                width: 14px;
+                height: 14px;
+            }
+            div::-webkit-scrollbar-track {
+                background: #f0f0f0;
+                border-radius: 10px;
+            }
+            div::-webkit-scrollbar-thumb {
+                background: #888;
+                border-radius: 10px;
+                border: 3px solid #f0f0f0;
+            }
+            div::-webkit-scrollbar-thumb:hover {
+                background: #555;
+            }
+            /* Firefox scrollbar */
+            * {
+                scrollbar-width: thin;
+                scrollbar-color: #888 #f0f0f0;
+            }
+        </style>
         '''
         display(HTML(html))
         
@@ -1185,8 +1270,17 @@ Return format: Complete JSON object with the same structure, wrapped in ```json`
     def on_view_change(change):
         nonlocal current_json
         
-        # Always use the latest validated data if available
-        display_json = validation_state['validated_data'] or current_json
+        # Reset validation state when switching views to prevent stale data
+        # Only preserve validated_data if we're staying in the same edit session
+        if change['old'] == 'Raw JSON' and change['new'] != 'Raw JSON':
+            # Keep validated data when leaving Raw JSON mode (user may have validated)
+            pass
+        elif change['old'] == 'AI Chat' and change['new'] != 'AI Chat':
+            # AI Chat updates current_json directly, so use that
+            validation_state['validated_data'] = None
+        
+        # Always use the latest validated data if available, otherwise current_json
+        display_json = validation_state['validated_data'] if validation_state['validated_data'] is not None else current_json
         
         if change['new'] == 'Rendered':
             # Clear all containers
@@ -1306,8 +1400,26 @@ Return the corrected JSON object."""
                 
             except json.JSONDecodeError as e:
                 print(f"❌ Could not parse LLM response as JSON: {e}")
+                print("\n📄 Raw response (first 500 chars):")
+                print(response_text[:500])
+            except AttributeError as e:
+                print(f"❌ API response error: {e}")
+                print("The API might have returned an unexpected response format.")
             except Exception as e:
-                print(f"❌ Error during LLM request: {e}")
+                error_msg = str(e)
+                if "429" in error_msg or "quota" in error_msg.lower():
+                    print(f"❌ Rate limit exceeded: {e}")
+                    print("Please wait a moment and try again.")
+                elif "401" in error_msg or "403" in error_msg or "auth" in error_msg.lower():
+                    print(f"❌ Authentication error: {e}")
+                    print("Please check your API key.")
+                elif "timeout" in error_msg.lower():
+                    print(f"❌ Request timeout: {e}")
+                    print("The request took too long. Try with a simpler instruction.")
+                else:
+                    print(f"❌ Error during LLM request: {e}")
+                    import traceback
+                    traceback.print_exc()
     
     def on_undo(b):
         nonlocal current_json, history
