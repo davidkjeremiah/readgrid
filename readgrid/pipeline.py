@@ -214,26 +214,18 @@ def show_comparison_view(json_path: str, mode: str = "ir", uploads_dir: str = 'u
         </script>
         <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
         """
-    
+
     full_html = f"""
     <html><head>{mathjax_scripts}<style>
-        .container {{ 
-            display: flex; 
-            gap: 20px; 
-            font-family: 'Times New Roman', 'Times', serif; 
-            height: 800px; 
-        }}
+        .container {{ display: flex; gap: 20px; font-family: 'Times New Roman', 'Times', serif; }}
         
         .panel {{ 
             flex: 1; 
             border: 1px solid #ddd; 
             padding: 15px; 
             border-radius: 8px; 
-            background-color: #fdfdfd;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            min-height: 0;
+            overflow-x: auto; 
+            background-color: #fdfdfd; 
         }}
         
         .panel-title {{
@@ -248,31 +240,6 @@ def show_comparison_view(json_path: str, mode: str = "ir", uploads_dir: str = 'u
             border-radius: 8px;
             padding: 15px;
             background: #fff;
-            overflow-y: auto;
-            flex: 1;
-            min-height: 0;
-        }}
-        
-        /* Visible scrollbar styling */
-        .inner-card::-webkit-scrollbar,
-        .panel::-webkit-scrollbar {{
-            width: 14px;
-            height: 14px;
-        }}
-        .inner-card::-webkit-scrollbar-track,
-        .panel::-webkit-scrollbar-track {{
-            background: #f0f0f0;
-            border-radius: 10px;
-        }}
-        .inner-card::-webkit-scrollbar-thumb,
-        .panel::-webkit-scrollbar-thumb {{
-            background: #888;
-            border-radius: 10px;
-            border: 3px solid #f0f0f0;
-        }}
-        .inner-card::-webkit-scrollbar-thumb:hover,
-        .panel::-webkit-scrollbar-thumb:hover {{
-            background: #555;
         }}
         
         .document-container {{ margin: 0; padding: 0; }}
@@ -889,6 +856,7 @@ def clean_json_fields(data: dict) -> dict:
             cleaned[key] = clean_latex(cleaned[key])
     return cleaned
 
+
 def editor(
     row_id: str,
     api_key: Optional[str] = None,
@@ -901,7 +869,7 @@ def editor(
     final_outputs_dir: str = 'final_outputs'
 ):
     """
-    Interactive JSON editor with LLM assistance, Rendered view, and Raw JSON editing.
+    Interactive JSON editor with LLM assistance for correcting document extraction errors.
     
     Args:
         row_id: The document ID to edit
@@ -1011,169 +979,33 @@ Common edit types:
 Return format: Complete JSON object with the same structure, wrapped in ```json``` code block."""
     
     # --- 6. Helper functions ---
-    def show_rendered_view(json_data, image_path):
-        """Display rendered view: original image (left) vs rendered content (right)"""
-        # Prepare image
-        with open(image_path, 'rb') as f:
-            img_bytes = f.read()
-        img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-        
-        # Prepare rendered content
-        header = str(json_data.get("Page header", "") or "").strip()
-        text = str(json_data.get("Page text", "") or "").strip()
-        footer = str(json_data.get("Page footer", "") or "").strip()
-        
-        # Process LaTeX
-        processed_text = text.replace('\\(', '$').replace('\\)', '$')
-        processed_text = processed_text.replace('\\[', '$$').replace('\\]', '$$')
-        pattern = re.compile(r"\$\$(.*?)\$\$\s*?\n\s*?\((\d+)\)", re.DOTALL)
-        final_text = pattern.sub(r"$$\1 \\tag{\2}$$", processed_text)
-        final_text = final_text.replace('\n', '<br>')
-        
-        rendered_parts = []
-        if header:
-            rendered_parts.append(f'<div class="header-section">{header}</div>')
-        rendered_parts.append(f'<div class="rendered-body">{final_text}</div>')
-        if footer:
-            rendered_parts.append(f'<div class="footer-section">{footer}</div>')
-        
-        rendered_content = ''.join(rendered_parts)
-        
-        html = f'''
-        <div style="display:flex; gap:10px; align-items:flex-start; height:800px;">
-            <div style="flex:1; border:1px solid #ccc; padding:10px; border-radius:5px; overflow-y:auto;">
-                <h4 style="text-align:center; margin-top:0;">Original Document</h4>
-                <img src="data:image/jpeg;base64,{img_b64}" style="width:100%; height:auto; border:1px solid #ddd;">
-            </div>
-            <div style="flex:1; border:1px solid #ccc; border-radius:5px; display:flex; flex-direction:column; height:100%;">
-                <h4 style="text-align:center; margin:10px; flex-shrink:0;">Rendered Document Preview</h4>
-                <div style="flex:1; overflow-y:auto; padding:10px; min-height:0;">
-                    <div style="font-family: Georgia, serif; line-height:1.6;">
-                        {rendered_content}
-                    </div>
-                </div>
-            </div>
-        </div>
-        <script>
-            MathJax = {{
-                tex: {{ inlineMath: [['$','$'], ['\\\\(','\\\\)']], displayMath: [['$$','$$'], ['\\\\[','\\\\]']] }},
-                svg: {{ fontCache: 'global' }}
-            }};
-        </script>
-        <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-        <style>
-            .header-section {{
-                margin-bottom: 15px;
-                font-size: 18px;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 6px;
-                background: #fafafa;
-            }}
-            .rendered-body {{
-                text-align: justify;
-                line-height: 1.8;
-                font-size: 18px;
-            }}
-            .footer-section {{
-                margin-top: 20px;
-                font-size: 18px;
-                text-align: center;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 6px;
-                background: #fafafa;
-            }}
-            
-            /* Visible scrollbar styling */
-            div::-webkit-scrollbar {{
-                width: 14px;
-                height: 14px;
-            }}
-            div::-webkit-scrollbar-track {{
-                background: #f0f0f0;
-                border-radius: 10px;
-            }}
-            div::-webkit-scrollbar-thumb {{
-                background: #888;
-                border-radius: 10px;
-                border: 3px solid #f0f0f0;
-            }}
-            div::-webkit-scrollbar-thumb:hover {{
-                background: #555;
-            }}
-            
-            /* Firefox scrollbar */
-            * {{
-                scrollbar-width: thin;
-                scrollbar-color: #888 #f0f0f0;
-            }}
-        </style>
-        '''
-        display(HTML(html))
-    
-    def show_raw_json_view(json_data, image_path):
-        """Display raw JSON editor with image on left"""
-        with open(image_path, 'rb') as f:
-            img_bytes = f.read()
-        img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-        
+    def show_initial_view(json_data, image_path):
+        """Display initial view with image on left and JSON on right"""
         json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
         
-        # Create the JSON editor textarea with consistent height
-        if validation_state['json_editor'] is None:
-            validation_state['json_editor'] = widgets.Textarea(
-                value=json_str,
-                layout=widgets.Layout(width='100%', height='730px'),  # Match container height
-                description='',
-                disabled=False
-            )
-        else:
-            # Update with current JSON
-            validation_state['json_editor'].value = json_str
+        left_output = widgets.Output(layout=widgets.Layout(width='50%', padding='10px'))
+        right_output = widgets.Output(layout=widgets.Layout(width='50%', padding='10px'))
         
-        html = f'''
-        <div style="display:flex; gap:10px; margin-bottom:10px; height:800px;">
-            <div style="flex:1; border:1px solid #ccc; padding:10px; border-radius:5px; overflow-y:auto; height:100%;">
-                <h4 style="margin-top:0;">Original Document</h4>
-                <img src="data:image/jpeg;base64,{img_b64}" style="width:100%; height:auto; border:1px solid #ddd;">
-            </div>
-            <div style="flex:1; display:flex; flex-direction:column; height:100%;">
-                <div style="flex-shrink:0;">
-                    <h4 style="color:#333; margin-top:0;">Raw JSON Editor</h4>
-                    <p style="color:#666; font-size:0.9em; margin-bottom:10px;">Edit JSON manually, then click "Validate JSON" before saving.</p>
-                </div>
-            </div>
-        </div>
-        <style>
-            /* Visible scrollbar styling */
-            div::-webkit-scrollbar {
-                width: 14px;
-                height: 14px;
-            }
-            div::-webkit-scrollbar-track {
-                background: #f0f0f0;
-                border-radius: 10px;
-            }
-            div::-webkit-scrollbar-thumb {
-                background: #888;
-                border-radius: 10px;
-                border: 3px solid #f0f0f0;
-            }
-            div::-webkit-scrollbar-thumb:hover {
-                background: #555;
-            }
-            /* Firefox scrollbar */
-            * {
-                scrollbar-width: thin;
-                scrollbar-color: #888 #f0f0f0;
-            }
-        </style>
-        '''
-        display(HTML(html))
+        # Left side - Image
+        with left_output:
+            print("Original Document")
+            print("-" * 40)
+            if image_path and os.path.exists(image_path):
+                display(IPImage(filename=image_path))
+            else:
+                print("No image available")
         
-        # Return the editor widget so it can be placed in a container
-        return validation_state['json_editor']
+        # Right side - JSON
+        with right_output:
+            print("Current JSON")
+            print("-" * 40)
+            html = [f'<div style="font-family: monospace; font-size: {font_size}px; white-space: pre-wrap; word-wrap: break-word; color: #000; max-height: 600px; overflow-y: auto;">']
+            for line in json_str.splitlines():
+                html.append(f'<div>{line}</div>')
+            html.append('</div>')
+            display(HTML(''.join(html)))
+        
+        display(widgets.HBox([left_output, right_output], layout=widgets.Layout(width='100%')))
     
     def generate_unified_diff(original, corrected):
         """Generate unified diff"""
@@ -1209,29 +1041,54 @@ Return format: Complete JSON object with the same structure, wrapped in ```json`
         html_lines.append('</div>')
         display(HTML('\n'.join(html_lines)))
     
+    def show_side_by_side_diff(original, corrected):
+        """Display side-by-side diff with color coding"""
+        original_str = json.dumps(original, indent=2, ensure_ascii=False)
+        corrected_str = json.dumps(corrected, indent=2, ensure_ascii=False)
+        
+        original_lines = original_str.splitlines()
+        corrected_lines = corrected_str.splitlines()
+        
+        matcher = difflib.SequenceMatcher(None, original_lines, corrected_lines)
+        
+        html = [f'<div style="display: flex; gap: 10px; font-family: monospace; font-size: {font_size}px; max-width: 100%;">']
+        
+        # Left side (Original - Red)
+        html.append('<div style="flex: 1; border: 1px solid #ddd; padding: 10px; background-color: #fff; overflow-x: auto;">')
+        html.append('<div style="font-weight: bold; margin-bottom: 10px; color: #d1242f;">Original (Before)</div>')
+        html.append('<div style="white-space: pre-wrap; word-wrap: break-word;">')
+        
+        # Right side (Corrected - Green)
+        right_html = ['<div style="flex: 1; border: 1px solid #ddd; padding: 10px; background-color: #fff; overflow-x: auto;">']
+        right_html.append('<div style="font-weight: bold; margin-bottom: 10px; color: #0a6e0a;">Corrected (After)</div>')
+        right_html.append('<div style="white-space: pre-wrap; word-wrap: break-word;">')
+        
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == 'equal':
+                for line in original_lines[i1:i2]:
+                    html.append(f'<div style="color: #333;">{line}</div>')
+                for line in corrected_lines[j1:j2]:
+                    right_html.append(f'<div style="color: #333;">{line}</div>')
+            elif tag == 'delete':
+                for line in original_lines[i1:i2]:
+                    html.append(f'<div style="background-color: #ffd7d5; color: #d1242f;">- {line}</div>')
+            elif tag == 'insert':
+                for line in corrected_lines[j1:j2]:
+                    right_html.append(f'<div style="background-color: #d1f0d1; color: #0a6e0a;">+ {line}</div>')
+            elif tag == 'replace':
+                for line in original_lines[i1:i2]:
+                    html.append(f'<div style="background-color: #ffd7d5; color: #d1242f;">- {line}</div>')
+                for line in corrected_lines[j1:j2]:
+                    right_html.append(f'<div style="background-color: #d1f0d1; color: #0a6e0a;">+ {line}</div>')
+        
+        html.append('</div></div>')
+        right_html.append('</div></div>')
+        html.append(''.join(right_html))
+        html.append('</div>')
+        
+        display(HTML(''.join(html)))
+    
     # --- 7. Create UI widgets ---
-    
-    # View mode selector
-    view_mode = widgets.ToggleButtons(
-        options=['Rendered', 'Raw JSON', 'AI Chat'],
-        description='View:',
-        button_style='info',
-        value='Rendered'
-    )
-    
-    # Containers for different views
-    output_area = widgets.Output()
-    gemini_container = widgets.VBox([])
-    raw_json_container = widgets.VBox([])  # New container for Raw JSON editor
-    
-    # Validation state for raw JSON editing
-    validation_state = {
-        'is_valid': False,
-        'validated_data': None,
-        'json_editor': None
-    }
-    
-    # AI Chat widgets
     instruction_input = widgets.Textarea(
         value='Compare the JSON with the document image and correct any formatting errors.',
         placeholder='Type your instruction here...',
@@ -1239,9 +1096,10 @@ Return format: Complete JSON object with the same structure, wrapped in ```json`
         layout=widgets.Layout(width='100%', height='80px')
     )
     
-    send_button = widgets.Button(description="🚀 Send", button_style="primary")
-    undo_button = widgets.Button(description="↩️ Undo", button_style="warning")
-    reset_button = widgets.Button(description="🔄 Reset", button_style="danger")
+    send_button = widgets.Button(description="Send", button_style="primary")
+    undo_button = widgets.Button(description="Undo", button_style="warning")
+    reset_button = widgets.Button(description="Reset", button_style="danger")
+    save_button = widgets.Button(description="Save", button_style="success")
     
     include_image_checkbox = widgets.Checkbox(
         value=True,
@@ -1249,110 +1107,41 @@ Return format: Complete JSON object with the same structure, wrapped in ```json`
         indent=False
     )
     
-    gemini_output = widgets.Output()
-    
-    # Action buttons (always visible)
-    validate_btn = widgets.Button(
-        description='Validate JSON',
-        button_style='warning',
-        icon='check'
+    diff_style_dropdown = widgets.Dropdown(
+        options=[('Unified', 'unified'), ('Side-by-Side', 'side-by-side')],
+        value='unified',
+        description='Diff view:',
+        style={'description_width': 'auto'}
     )
     
-    save_button = widgets.Button(
-        description="💾 Save to File",
-        button_style="success",
-        icon='save'
-    )
+    output_area = widgets.Output()
     
-    status_label = widgets.HTML(value='')
-    
-    # --- 8. View change handler ---
-    def on_view_change(change):
-        nonlocal current_json
-        
-        # Reset validation state when switching views to prevent stale data
-        # Only preserve validated_data if we're staying in the same edit session
-        if change['old'] == 'Raw JSON' and change['new'] != 'Raw JSON':
-            # Keep validated data when leaving Raw JSON mode (user may have validated)
-            pass
-        elif change['old'] == 'AI Chat' and change['new'] != 'AI Chat':
-            # AI Chat updates current_json directly, so use that
-            validation_state['validated_data'] = None
-        
-        # Always use the latest validated data if available, otherwise current_json
-        display_json = validation_state['validated_data'] if validation_state['validated_data'] is not None else current_json
-        
-        if change['new'] == 'Rendered':
-            # Clear all containers
-            gemini_container.children = []
-            raw_json_container.children = []
-            with output_area:
-                clear_output(wait=True)
-                show_rendered_view(display_json, image_path)
-        
-        elif change['new'] == 'Raw JSON':
-            # Clear other containers, show Raw JSON
-            gemini_container.children = []
-            with output_area:
-                clear_output(wait=True)
-                json_editor = show_raw_json_view(display_json, image_path)
-            raw_json_container.children = [json_editor]
-        
-        elif change['new'] == 'AI Chat':
-            # Clear other containers, show Gemini
-            raw_json_container.children = []
-            with output_area:
-                clear_output(wait=True)
-            
-            help_text = widgets.HTML("""
-            <div style="padding: 10px; background: #f0f8ff; border-left: 4px solid #2196F3; margin-bottom: 10px;">
-                <b>💡 AI Chat Editor</b><br>
-                Type instructions naturally, like:<br>
-                • "Add a newline after the phrase 'See table 13'"<br>
-                • "Remove the newline in the header"<br>
-                • "Fix all formatting errors"<br>
-                Use <b>Undo</b> to revert changes. Click <b>Save</b> when satisfied.
-            </div>
-            """)
-            
-            gemini_ui = widgets.VBox([
-                help_text,
-                widgets.Label("💬 Your instruction:"),
-                instruction_input,
-                widgets.HBox([send_button, undo_button, reset_button]),
-                include_image_checkbox,
-                gemini_output
-            ])
-            gemini_container.children = [gemini_ui]
-    
-    # --- 9. Button handlers ---
+    # --- 8. Button handlers ---
     def on_send(b):
         nonlocal current_json, history, conversation_history
         
-        with gemini_output:
+        with output_area:
             clear_output(wait=True)
             instruction = instruction_input.value.strip()
             
             if not instruction:
-                print("⚠️ Please enter an instruction")
+                print("Please enter an instruction")
                 return
             
-            print(f"💬 You: {instruction}")
-            print("\n🔄 Processing...\n")
+            print(f"You: {instruction}")
+            print("\nProcessing...\n")
             
             previous_json = current_json.copy()
             
             try:
-                prompt = f"""{SYSTEM_PROMPT}
-
-Current JSON:
+                prompt = f"""Current JSON:
 {json.dumps(current_json, indent=2, ensure_ascii=False)}
 
 User request: {instruction}
 
 Return the corrected JSON object."""
                 
-                parts = [types.Part(text=prompt)]
+                parts = [SYSTEM_PROMPT + "\n\n" + prompt]
                 
                 if include_image_checkbox.value:
                     parts.append(
@@ -1381,159 +1170,87 @@ Return the corrected JSON object."""
                 corrected_json = json.loads(response_text)
                 
                 if previous_json != corrected_json:
-                    print("📝 Changes made:\n")
-                    diff = generate_unified_diff(previous_json, corrected_json)
-                    show_compact_diff(diff)
+                    print("Changes made:\n")
+                    
+                    if diff_style_dropdown.value == 'side-by-side':
+                        show_side_by_side_diff(previous_json, corrected_json)
+                    else:
+                        diff = generate_unified_diff(previous_json, corrected_json)
+                        show_compact_diff(diff)
                     
                     current_json = corrected_json
                     history.append(corrected_json.copy())
-                    validation_state['validated_data'] = corrected_json
                     conversation_history.append({
                         'instruction': instruction,
                         'response': response_text
                     })
-                    status_label.value = '<span style="color:green;">✅ Changes ready - click "Save" to update file</span>'
                 else:
-                    print("✅ No changes needed or no changes detected")
+                    print("No changes needed or no changes detected")
                 
                 print("\n" + "="*60)
                 
             except json.JSONDecodeError as e:
-                print(f"❌ Could not parse LLM response as JSON: {e}")
-                print("\n📄 Raw response (first 500 chars):")
-                print(response_text[:500])
-            except AttributeError as e:
-                print(f"❌ API response error: {e}")
-                print("The API might have returned an unexpected response format.")
+                print(f"Could not parse LLM response as JSON: {e}")
             except Exception as e:
-                error_msg = str(e)
-                if "429" in error_msg or "quota" in error_msg.lower():
-                    print(f"❌ Rate limit exceeded: {e}")
-                    print("Please wait a moment and try again.")
-                elif "401" in error_msg or "403" in error_msg or "auth" in error_msg.lower():
-                    print(f"❌ Authentication error: {e}")
-                    print("Please check your API key.")
-                elif "timeout" in error_msg.lower():
-                    print(f"❌ Request timeout: {e}")
-                    print("The request took too long. Try with a simpler instruction.")
-                else:
-                    print(f"❌ Error during LLM request: {e}")
-                    import traceback
-                    traceback.print_exc()
+                print(f"Error during LLM request: {e}")
     
     def on_undo(b):
         nonlocal current_json, history
         
-        with gemini_output:
+        with output_area:
             clear_output(wait=True)
             if len(history) > 1:
                 history.pop()
                 current_json = history[-1].copy()
-                validation_state['validated_data'] = current_json
-                print("↩️ Undone last change")
+                print("Undone last change")
+                print("\nCurrent state:")
+                print(json.dumps(current_json, indent=2, ensure_ascii=False)[:500] + "...")
             else:
-                print("⚠️ Nothing to undo")
+                print("Nothing to undo")
     
     def on_reset(b):
         nonlocal current_json, history, conversation_history
         
-        with gemini_output:
+        with output_area:
             clear_output(wait=True)
             current_json = original_json.copy()
             history = [original_json.copy()]
             conversation_history = []
-            validation_state['validated_data'] = None
-            status_label.value = ''
-            print("🔄 Reset to original JSON")
-    
-    def validate_json(btn):
-        """Validate manually edited JSON from Raw JSON view"""
-        if view_mode.value != 'Raw JSON':
-            status_label.value = '<span style="color:orange;">⚠️ Switch to Raw JSON view first</span>'
-            return
-        
-        if validation_state['json_editor'] is None:
-            status_label.value = '<span style="color:red;">❌ No JSON editor found</span>'
-            return
-        
-        try:
-            edited_json = json.loads(validation_state['json_editor'].value)
-            
-            required_keys = ["Page header", "Page text", "Page footer"]
-            missing = [k for k in required_keys if k not in edited_json]
-            
-            if missing:
-                status_label.value = f'<span style="color:red;">❌ Missing: {", ".join(missing)}</span>'
-                validation_state['is_valid'] = False
-            else:
-                status_label.value = '<span style="color:green;">✅ Valid - ready to save</span>'
-                validation_state['is_valid'] = True
-                validation_state['validated_data'] = edited_json
-                
-                # Update current_json and history
-                nonlocal current_json, history
-                current_json = edited_json.copy()
-                history.append(edited_json.copy())
-        
-        except json.JSONDecodeError as e:
-            status_label.value = f'<span style="color:red;">❌ Invalid JSON: {str(e)}</span>'
-            validation_state['is_valid'] = False
+            print("Reset to original JSON")
     
     def on_save(b):
-        nonlocal current_json
-        
-        # Determine what to save
-        data_to_save = validation_state['validated_data'] or current_json
-        
-        # Apply cleaning before saving
-        print("🧹 Applying automatic cleaning...")
-        cleaned_data = clean_json_fields(data_to_save)
-        
-        # Save to file
-        try:
+        with output_area:
+            clear_output(wait=True)
             with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(cleaned_data, f, indent=4, ensure_ascii=False)
-            
-            status_label.value = f'<span style="color:green;">✅ Saved and cleaned: {json_path}</span>'
-            print(f"✅ Saved to '{json_path}' (with automatic cleaning applied)")
-            
-            # Update current_json to reflect cleaned version
-            current_json = cleaned_data.copy()
-            validation_state['validated_data'] = cleaned_data.copy()
-            
-        except Exception as e:
-            status_label.value = f'<span style="color:red;">❌ Save failed: {str(e)}</span>'
-            print(f"❌ Error saving: {e}")
+                json.dump(current_json, f, indent=4, ensure_ascii=False)
+            print(f"Saved to '{json_path}'")
     
     send_button.on_click(on_send)
     undo_button.on_click(on_undo)
     reset_button.on_click(on_reset)
-    validate_btn.on_click(validate_json)
     save_button.on_click(on_save)
-    view_mode.observe(on_view_change, names='value')
     
-    # --- 10. Display UI ---
-    print("\n📝 JSON EDITOR WITH MULTI-VIEW INTERFACE")
+    # --- 9. Display UI ---
+    print("\nJSON EDITOR WITH CONVERSATIONAL INTERFACE")
     print("="*60)
-    print("\n✨ Features:")
-    print("  • Rendered: See original image vs formatted content")
-    print("  • Raw JSON: Manual JSON editing with validation")
-    print("  • AI Chat: Conversational AI-powered editing")
-    print("  • Auto-clean: Automatic cleaning applied on save")
+    print("\nType instructions naturally, like:")
+    print("  - 'Add a newline after the phrase \"See table 13\"'")
+    print("  - 'Remove the newline in the header'")
+    print("  - 'Fix the Page footer'")
+    print("  - 'Compare with image and fix all errors'")
     print("\n" + "="*60 + "\n")
     
     display(widgets.VBox([
-        view_mode,
-        widgets.HBox([validate_btn, save_button]),
-        status_label,
-        gemini_container,
-        raw_json_container,
+        widgets.Label("Your instruction:"),
+        instruction_input,
+        widgets.HBox([send_button, undo_button, reset_button, save_button]),
+        widgets.HBox([include_image_checkbox, diff_style_dropdown]),
         output_area
     ]))
     
-    # Show initial rendered view
+    # Show initial view
     with output_area:
-        show_rendered_view(current_json, image_path)
+        show_initial_view(current_json, image_path)
 
 # ==================== STAGE 1: UPLOAD, DETECT, & EDIT ====================
 
