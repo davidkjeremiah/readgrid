@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="readgrid",
-    version="0.2.1",
+    version="0.2.2",
     author="David Jeremiah",
     author_email="flasconnect@gmail.com",
     description="A document layout pipeline for detecting tables, images, and structured extraction.",
