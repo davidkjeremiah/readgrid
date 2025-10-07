@@ -1,5 +1,6 @@
 opencv-python
 numpy
 Pillow
-google-generativeai
+google-genai
 ipywidgets
+IPython

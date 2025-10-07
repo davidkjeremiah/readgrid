@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: readgrid
-Version: 0.2.0
+Version: 0.2.1
 Summary: A document layout pipeline for detecting tables, images, and structured extraction.
 Home-page: https://github.com/davidkjeremiah/readgrid
 Author: David Jeremiah
@@ -15,8 +15,9 @@ License-File: LICENSE
 Requires-Dist: opencv-python
 Requires-Dist: numpy
 Requires-Dist: Pillow
-Requires-Dist: google-generativeai
+Requires-Dist: google-genai
 Requires-Dist: ipywidgets
+Requires-Dist: IPython
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier
