@@ -773,25 +773,39 @@ def interactive_editor(img: np.ndarray, initial_boxes: List[List[int]], editor_t
         return initial_boxes if initial_boxes else []
 
 def clean_table_html(html: str) -> str:
-    """Remove forbidden attributes/tags and flatten table newlines."""
+    """Remove forbidden attributes/tags and normalize table HTML."""
     if not html:
         return html
     
-    # Remove disallowed attributes
-    html = re.sub(r'\s(?:class|id|style|border|cellspacing|cellpadding)="[^"]*"', '', html, flags=re.IGNORECASE)
+    # 1. Remove disallowed attributes (safer pattern)
+    html = re.sub(
+        r'\s+(?:class|id|style|border|cellspacing|cellpadding|width|height|align|valign|bgcolor)\s*=\s*["\'][^"\']*["\']',
+        '', html, flags=re.IGNORECASE
+    )
     
-    # Remove forbidden tags but keep their inner content
-    forbidden_tags = ['caption', 'p', 'em', 'strong', 'span', 'div']
+    # 2. Remove forbidden tags while preserving content
+    # Use more precise non-greedy matching
+    forbidden_tags = ['caption', 'p', 'em', 'strong', 'span', 'div', 'u', 'b', 'i', 'font', 'sup', 'sub']
     for tag in forbidden_tags:
-        html = re.sub(fr'</?{tag}.*?>', '', html, flags=re.IGNORECASE | re.DOTALL)
+        # Remove opening tags: <tag> or <tag attr="...">
+        html = re.sub(fr'<{tag}(?:\s+[^>]*)?>', '', html, flags=re.IGNORECASE)
+        # Remove closing tags: </tag>
+        html = re.sub(fr'</{tag}>', '', html, flags=re.IGNORECASE)
     
-    # Remove newlines inside <table>…</table>
-    def strip_table_newlines(match):
-        content = match.group(0)
-        return re.sub(r'\s*\n\s*', '', content)
-    html = re.sub(r'<table.*?>.*?</table>', strip_table_newlines, html, flags=re.DOTALL | re.IGNORECASE)
+    # 3. Replace non-breaking spaces
+    html = html.replace('&nbsp;', ' ').replace('\xa0', ' ')
     
-    return html
+    # 4. Normalize whitespace (but preserve single newlines)
+    html = re.sub(r' {2,}', ' ', html)  # Multiple spaces → single space
+    html = re.sub(r'\n{3,}', '\n\n', html)  # Multiple newlines → double newline
+    
+    # 5. Flatten excessive whitespace around table tags only
+    html = re.sub(r'<table[^>]*>\s+', '<table>', html, flags=re.IGNORECASE)
+    html = re.sub(r'\s+</table>', '</table>', html, flags=re.IGNORECASE)
+    html = re.sub(r'<tr[^>]*>\s+', '<tr>', html, flags=re.IGNORECASE)
+    html = re.sub(r'\s+</tr>', '</tr>', html, flags=re.IGNORECASE)
+    
+    return html.strip()
 
 def fix_broken_words(text: str) -> str:
     """Fix broken words like 'Ac-\\ncordingly' -> 'Accordingly\\n'."""
